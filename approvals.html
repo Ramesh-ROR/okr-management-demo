@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Approvals · OKR Management System</title>
+  <link rel="icon" href="assets/img/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="assets/css/styles.css">
+</head>
+<body>
+  <div id="app" class="app"><noscript><p>This demo needs JavaScript. Please enable it and reload the page.</p></noscript></div>
+  <script src="assets/js/data.js"></script>
+  <script src="assets/js/core.js"></script>
+  <script src="assets/js/ui.js"></script>
+  <script>
+  (function () {
+    'use strict';
+    var O = window.OKR, U = O.ui, esc = O.esc;
+    var main = U.shell('approvals', 'Approvals');
+    if (!main) return;
+    var me = O.currentUser();
+
+    function proposedText(a, o) {
+      if (!a.proposed || !o) return '';
+      return Object.keys(a.proposed).map(function (k) {
+        return k === 'target' ? 'Target ' + O.fmtValue(o, o.target) + ' → ' + O.fmtValue(o, a.proposed[k]) : k === 'weight' ? 'Weight ' + o.weight + ' → ' + a.proposed[k] : k + ': ' + a.proposed[k];
+      }).join('; ');
+    }
+
+    function render() {
+      var sorted = O.db.approvals.slice().sort(function (a, b) { return a.requestedOn < b.requestedOn ? 1 : -1; });
+      var mine = sorted.filter(O.can.decide);
+      var pending = sorted.filter(function (a) { return a.decision === 'Pending'; });
+      var decided = sorted.filter(function (a) { return a.decision !== 'Pending'; });
+      var requested = sorted.filter(function (a) { return a.requestedById === me.id; });
+
+      function table(list, withActions, emptyMsg) {
+        if (!list.length) return U.empty(emptyMsg);
+        return '<div class="card" style="padding:0"><div class="table-wrap"><table class="data"><thead><tr><th scope="col">Request</th><th scope="col">Item</th><th scope="col">Summary</th><th scope="col">Requested by</th><th scope="col">Approver</th><th scope="col">' + (withActions ? 'Decide' : 'Decision') + '</th></tr></thead><tbody>' +
+          list.map(function (a) {
+            var o = O.okr(a.okrId);
+            var by = O.user(a.requestedById), dec = O.user(a.decidedById);
+            var change = proposedText(a, o);
+            var decideCell = withActions
+              ? '<div class="row nowrap"><button type="button" class="btn btn-sm btn-primary" data-approve="' + esc(a.id) + '">Approve</button><button type="button" class="btn btn-sm" data-reject="' + esc(a.id) + '">Reject</button></div>'
+              : U.decisionChip(a.decision) + (dec ? '<div class="small muted">' + esc(dec.displayName) + ', ' + O.fmtDate(a.decidedOn) + '</div>' : '') + (a.comment ? '<div class="small">“' + esc(a.comment) + '”</div>' : '');
+            return '<tr><td class="nowrap"><span class="chip">' + esc(O.REQUEST_TYPES[a.requestType]) + '</span></td>' +
+              '<td class="cell-title">' + (o ? U.levelChip(o.level) + ' ' + U.okrLink(o) : esc(a.okrId)) + '</td>' +
+              '<td style="min-inline-size:220px">' + esc(a.summary) + (change ? '<div class="small"><strong>Proposed:</strong> ' + esc(change) + '</div>' : '') + '</td>' +
+              '<td class="nowrap small">' + esc(by ? by.displayName : '–') + '<br><span class="muted">' + O.fmtDate(a.requestedOn) + '</span></td>' +
+              '<td class="small">' + esc(O.ROLE_LABELS[a.approverRole]) + (a.approverRole === 'DepartmentCoordinator' && O.dept(a.departmentId) ? '<br><span class="muted">' + esc(O.dept(a.departmentId).code) + '</span>' : '') + '</td>' +
+              '<td>' + decideCell + '</td></tr>';
+          }).join('') + '</tbody></table></div></div>';
+      }
+
+      var tab = function (key, label, count) { return '<button type="button" role="tab" id="tab-' + key + '" data-tab="' + key + '" aria-controls="panel-' + key + '">' + label + '<span class="tab-count">' + count + '</span></button>'; };
+      var panel = function (key, html) { return '<div role="tabpanel" id="panel-' + key + '" data-panel="' + key + '" aria-labelledby="tab-' + key + '">' + html + '</div>'; };
+      main.innerHTML = U.pageHeader({
+        title: 'Approvals',
+        subtitle: 'New items, target and weight changes, and closures that need sign-off. You are acting as ' + esc(me.displayName) + ' (' + esc(O.ROLE_LABELS[me.role]) + ').',
+      }) +
+      '<section id="tabs"><div class="tablist" role="tablist" aria-label="Approval views">' + tab('mine', 'Waiting for me', mine.length) + tab('pending', 'All pending', pending.length) + tab('decided', 'Decided', decided.length) + tab('requested', 'My requests', requested.length) + '</div>' +
+      panel('mine', (mine.length ? '' : '<p class="muted">Approvals are routed by level: goals to Executives, objectives to the VDO, key results to the department coordinator. Try “View as” another role.</p>') + table(mine, true, 'Nothing is waiting for your decision.')) +
+      panel('pending', table(pending, false, 'No pending requests.')) +
+      panel('decided', table(decided, false, 'No decisions yet.')) +
+      panel('requested', table(requested, false, 'You have not submitted any requests.')) + '</section>';
+      U.tabs(document.getElementById('tabs'));
+      U.refreshNav();
+    }
+
+    function decideDialog(id, decision) {
+      var a = O.db.approvals.filter(function (x) { return x.id === id; })[0];
+      var o = O.okr(a.okrId);
+      var reject = decision === 'Rejected';
+      var change = proposedText(a, o);
+      U.dialog({
+        title: (reject ? 'Reject ' : 'Approve ') + O.REQUEST_TYPES[a.requestType].toLowerCase() + (o ? ' – ' + o.code : ''),
+        body: '<div class="comment"><div class="small muted">' + esc((O.user(a.requestedById) || {}).displayName || '') + ' · ' + O.fmtDate(a.requestedOn) + '</div>' + esc(a.summary) + (change ? '<div class="small"><strong>Proposed:</strong> ' + esc(change) + '</div>' : '') + '</div>' +
+          (o ? '<p class="small" style="margin:0">Item: ' + U.okrLink(o) + '</p>' : '') +
+          (!reject && a.requestType === 'Create' ? '<p class="small muted" style="margin:0">Approving makes the item active for check-ins.</p>' : '') +
+          '<label class="field"><span class="field-label">Comment' + (reject ? '<span class="req" aria-hidden="true">*</span>' : ' (optional)') + '</span><textarea id="dc-comment" rows="3"' + (reject ? ' aria-required="true"' : '') + ' placeholder="' + (reject ? 'Explain what needs to change' : 'Any guidance for the requester') + '"></textarea><span class="error" id="dc-err" hidden>Give a reason so the requester knows what to change.</span></label>',
+        okLabel: reject ? 'Reject' : 'Approve',
+        okClass: reject ? 'btn-danger' : 'btn-primary',
+        onOk: function (dlg) {
+          var c = dlg.querySelector('#dc-comment').value.trim();
+          if (reject && !c) { dlg.querySelector('#dc-err').hidden = false; dlg.querySelector('#dc-comment').setAttribute('aria-invalid', 'true'); dlg.querySelector('#dc-comment').focus(); return false; }
+          O.decide(id, decision, c);
+          U.toast('Request ' + decision.toLowerCase(), 'success', 'The requester has been notified' + (decision === 'Approved' && a.proposed ? ' and the change is applied.' : '.'));
+          render();
+        },
+      });
+    }
+
+    main.addEventListener('click', function (e) {
+      var ap = e.target.closest('[data-approve]');
+      var rj = e.target.closest('[data-reject]');
+      if (ap) decideDialog(ap.getAttribute('data-approve'), 'Approved');
+      if (rj) decideDialog(rj.getAttribute('data-reject'), 'Rejected');
+    });
+    render();
+  })();
+  </script>
+</body>
+</html>

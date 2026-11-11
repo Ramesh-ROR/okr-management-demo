@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Create or edit OKR · OKR Management System</title>
+  <link rel="icon" href="assets/img/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="assets/css/styles.css">
+</head>
+<body>
+  <div id="app" class="app"><noscript><p>This demo needs JavaScript. Please enable it and reload the page.</p></noscript></div>
+  <script src="assets/js/data.js"></script>
+  <script src="assets/js/core.js"></script>
+  <script src="assets/js/ui.js"></script>
+  <script>
+  (function () {
+    'use strict';
+    var O = window.OKR, U = O.ui, esc = O.esc;
+    var editing = O.okr(O.param('id'));
+    var main = U.shell('explorer', editing ? 'Edit ' + editing.code : 'New OKR');
+    if (!main) return;
+    var me = O.currentUser();
+    var cycle = O.currentCycle();
+
+    if (O.param('id') && !editing) { main.innerHTML = U.pageHeader({ title: 'Item not found' }) + U.empty('<a href="explorer.html">Back to the OKR Explorer</a>'); return; }
+    if (editing && !O.can.edit(editing)) {
+      main.innerHTML = U.pageHeader({ title: 'Edit ' + editing.code }) + '<div class="msg msg-warning">The ' + esc(O.ROLE_LABELS[me.role]) + ' role cannot edit this item. Owners, executives, the VDO and the department’s coordinator can. <a href="okr.html?id=' + encodeURIComponent(editing.id) + '">Back to the item</a></div>';
+      return;
+    }
+    var levels = editing ? [editing.level] : O.can.createLevels();
+    if (!levels.length) {
+      main.innerHTML = U.pageHeader({ title: 'New OKR' }) + '<div class="msg msg-warning">The ' + esc(O.ROLE_LABELS[me.role]) + ' role cannot create OKRs. Switch role with “View as”.</div>';
+      return;
+    }
+
+    // ---------- initial values
+    var p = function (k) { return O.param(k); };
+    var parentFromUrl = O.okr(p('parent'));
+    var startLevel = editing ? editing.level : (levels.indexOf(p('level')) >= 0 ? p('level') : (parentFromUrl && levels.indexOf(O.childLevel(parentFromUrl.level)) >= 0 ? O.childLevel(parentFromUrl.level) : levels[0]));
+    var v = editing ? Object.assign({}, editing) : {
+      level: startLevel, parentId: parentFromUrl ? parentFromUrl.id : '', title: p('title') || '', description: p('description') || '',
+      ownerId: me.role === 'PlatformAdmin' ? '' : me.id, departmentId: parentFromUrl ? parentFromUrl.departmentId : (me.departmentId || ''), teamId: '',
+      measurementType: p('measurementType') || '', unit: p('unit') || '', baseline: p('baseline') || '', target: p('target') || '', weight: 10,
+      startDate: cycle.startDate, dueDate: cycle.endDate, visibility: 'Public',
+    };
+    if (!v.measurementType) v.measurementType = (v.level === 'Goal' || v.level === 'Objective') ? 'RolledUp' : v.level === 'KeyResult' ? 'Numeric' : 'Percentage';
+    if (!editing && v.measurementType === 'Percentage' && !v.unit) v.unit = '%';
+
+    var users = O.db.users.filter(function (u) { return u.role !== 'PlatformAdmin'; }).map(function (u) { return { value: u.id, label: u.displayName + ' – ' + u.jobTitle }; });
+
+    // ---------- markup
+    var title = editing ? 'Edit ' + O.LEVEL_LABELS[editing.level].toLowerCase() + ' ' + editing.code : 'New OKR';
+    main.innerHTML = U.pageHeader({
+      before: editing ? U.breadcrumb(editing) : '',
+      title: title,
+      subtitle: editing ? esc(editing.title) : 'Create a goal, objective, key result, initiative or action item in ' + esc(cycle.name) + '.',
+    }) +
+    '<div id="err-summary" class="msg msg-error" tabindex="-1" hidden style="margin-block-end:16px"></div>' +
+    '<div class="detail-grid"><form id="form" class="card stack" novalidate aria-label="' + esc(title) + '">' +
+      '<div class="form-grid">' +
+      field('level', 'Level', '<select id="level"' + (editing ? ' disabled' : '') + '>' + U.selectOptions(levels.map(function (l) { return { value: l, label: O.LEVEL_LABELS[l] }; }), v.level) + '</select>', true, editing ? 'The level cannot be changed after creation.' : 'Only the levels your role may create are listed.') +
+      field('parentId', 'Parent', '<select id="parentId"></select>', true, '') +
+      field('title', 'Title', '<input type="text" id="title" maxlength="160" value="' + esc(v.title) + '">', true, 'Outcome-focused and specific, at least 10 characters.', 'full') +
+      field('description', 'Description', '<textarea id="description" rows="3">' + esc(v.description) + '</textarea>', false, '', 'full') +
+      field('ownerId', 'Owner', '<select id="ownerId">' + U.selectOptions(users, v.ownerId, 'Choose an owner') + '</select>', true) +
+      field('departmentId', 'Department', '<select id="departmentId">' + U.selectOptions(O.db.departments.map(function (d) { return { value: d.id, label: d.name }; }), v.departmentId, 'Choose a department') + '</select>', true) +
+      field('teamId', 'Team', '<select id="teamId"></select>', false) +
+      field('visibility', 'Visibility', '<select id="visibility">' + U.selectOptions([{ value: 'Public', label: 'Everyone in the division' }, { value: 'Department', label: 'Own department only' }, { value: 'Private', label: 'Owner and managers only' }], v.visibility) + '</select>', true) +
+      field('measurementType', 'Measured as', '<select id="measurementType">' + U.selectOptions(O.MEASUREMENT_TYPES.map(function (m) { return { value: m, label: O.MEASUREMENT_LABELS[m] }; }), v.measurementType) + '</select>', true) +
+      field('unit', 'Unit', '<input type="text" id="unit" maxlength="20" value="' + esc(v.unit) + '" placeholder="e.g. %, min, km, substations">', false, '', 'measured') +
+      field('baseline', 'Baseline', '<input type="number" step="any" id="baseline" value="' + esc(v.baseline) + '">', false, 'Value at the start of the cycle.', 'measured') +
+      field('target', 'Target', '<input type="number" step="any" id="target" value="' + esc(v.target) + '">', false, 'Can be lower than the baseline (for example, fewer outages).', 'measured') +
+      field('weight', 'Weight', '<input type="number" min="0" max="100" step="1" id="weight" value="' + esc(v.weight) + '">', true, '') +
+      '<div></div>' +
+      field('startDate', 'Start date', '<input type="date" id="startDate" value="' + esc(v.startDate) + '" min="' + cycle.startDate + '" max="' + cycle.endDate + '">', true) +
+      field('dueDate', 'Due date', '<input type="date" id="dueDate" value="' + esc(v.dueDate) + '" min="' + cycle.startDate + '" max="' + cycle.endDate + '">', false) +
+      '</div>' +
+      (editing && editing.measurementType !== 'RolledUp' ? '<p class="hint" style="margin:0">Current value (' + esc(O.fmtValue(editing, editing.current)) + ') is updated through check-ins.</p>' : '') +
+      '<div id="gated" class="msg msg-info" hidden></div>' +
+      '<div class="form-footer"><a class="btn btn-subtle" href="' + (editing ? 'okr.html?id=' + encodeURIComponent(editing.id) : 'explorer.html') + '">Cancel</a>' +
+      (editing ? '<button type="submit" class="btn btn-primary" data-mode="save">' + U.icon('check') + '<span>Save changes</span></button>'
+        : '<button type="submit" class="btn" data-mode="draft" id="btn-draft">Save as draft</button><button type="submit" class="btn btn-primary" data-mode="submit" id="btn-submit">' + U.icon('check') + '<span id="btn-submit-label">Create</span></button>') +
+      '</div></form>' +
+      '<aside class="stack"><section class="card" aria-labelledby="help-h"><h2 class="card-title" id="help-h" style="margin-block-end:8px">How it rolls up</h2><div id="weight-help" class="small"></div></section>' +
+      '<section class="card" aria-labelledby="rules-h"><h2 class="card-title" id="rules-h" style="margin-block-end:8px">Rules for this level</h2><div id="level-help" class="small"></div></section>' +
+      (O.db.config.ai.enabled ? '<section class="card" id="ai-help" aria-labelledby="aih-h"><h2 class="card-title" id="aih-h" style="margin-block-end:8px">Need help with wording?</h2><p class="small muted">AI Assist can draft objectives and propose measurable key results.</p><button type="button" class="btn btn-sm" id="ai-btn">' + U.icon('ai') + '<span>Open AI Assist</span></button></section>' : '') +
+      '</aside></div>';
+
+    function field(id, label, control, required, hint, cls) {
+      return '<div class="field' + (cls === 'full' ? ' full' : '') + '" id="f-' + id + '"' + (cls === 'measured' ? ' data-measured' : '') + '>' +
+        '<label for="' + id + '" class="field-label">' + esc(label) + '<span class="req" data-req aria-hidden="true"' + (required ? '' : ' hidden') + '>*</span></label>' + control +
+        '<span class="hint" id="' + id + '-hint">' + (hint || '') + '</span><span class="error" id="' + id + '-err" hidden></span></div>';
+    }
+    var $ = function (id) { return document.getElementById(id); };
+
+    function requiredFields() {
+      var lvl = $('level').value;
+      var req = ['title', 'ownerId', 'departmentId', 'visibility', 'measurementType', 'weight', 'startDate'];
+      if (lvl !== 'Goal') req.push('parentId');
+      (O.levelConfig(lvl).requiredFields || []).forEach(function (f) {
+        if (f === 'team') req.push('teamId');
+        else if (['baseline', 'target', 'unit'].indexOf(f) >= 0) { if ($('measurementType').value !== 'RolledUp') req.push(f); }
+        else req.push(f);
+      });
+      if ($('measurementType').value !== 'RolledUp') { if (req.indexOf('target') < 0) req.push('target'); }
+      return req;
+    }
+
+    function syncParent() {
+      var lvl = $('level').value;
+      var pl = O.parentLevel(lvl);
+      var sel = $('parentId');
+      var wrap = $('f-parentId');
+      wrap.hidden = !pl;
+      if (!pl) { sel.innerHTML = ''; return; }
+      var opts = O.db.okrs.filter(function (o) { return o.level === pl && o.cycleId === cycle.id && o.approvalState !== 'Rejected' && (!editing || o.id !== editing.id); })
+        .sort(O.levelOrder).map(function (o) { return { value: o.id, label: o.code + ' – ' + (o.title.length > 70 ? o.title.slice(0, 70) + '…' : o.title) }; });
+      var current = sel.value || v.parentId;
+      sel.innerHTML = U.selectOptions(opts, current, 'Choose the parent ' + O.LEVEL_LABELS[pl].toLowerCase());
+      $('parentId-hint').textContent = O.LEVEL_LABELS[lvl] + 's sit under ' + O.LEVEL_LABELS[pl].toLowerCase() + 's.';
+    }
+    function syncTeams() {
+      var dep = $('departmentId').value;
+      var cur = $('teamId').value || v.teamId;
+      $('teamId').innerHTML = U.selectOptions(O.db.teams.filter(function (t) { return t.departmentId === dep; }).map(function (t) { return { value: t.id, label: t.name }; }), cur, dep ? 'No team' : 'Choose a department first');
+    }
+    function syncMeasured() {
+      var rolled = $('measurementType').value === 'RolledUp';
+      document.querySelectorAll('[data-measured]').forEach(function (el) { el.hidden = rolled; });
+      $('measurementType-hint').textContent = rolled ? 'Progress is calculated from the weighted progress of its children.' : $('measurementType').value === 'Milestone' ? 'Baseline 0 and target = number of milestones.' : 'Progress = (current − baseline) ÷ (target − baseline).';
+    }
+    function syncRequired() {
+      var req = requiredFields();
+      document.querySelectorAll('.field[id^="f-"]').forEach(function (wrap) {
+        var id = wrap.id.slice(2);
+        var on = req.indexOf(id) >= 0;
+        var star = wrap.querySelector('[data-req]');
+        if (star) star.hidden = !on;
+        var ctl = $(id);
+        if (ctl) { if (on) ctl.setAttribute('aria-required', 'true'); else ctl.removeAttribute('aria-required'); }
+      });
+      var lvl = $('level').value;
+      var cfg = O.levelConfig(lvl);
+      $('level-help').innerHTML = '<ul style="margin:0;padding-inline-start:18px">' +
+        '<li>' + (cfg.approvalRequired ? 'New ' + esc(O.LEVEL_LABELS[lvl].toLowerCase()) + 's need approval by the <strong>' + esc(O.ROLE_LABELS[cfg.approverRole]) + '</strong>.' : 'No approval needed; it is active as soon as it is saved.') + '</li>' +
+        '<li>Required by your administrator: ' + esc((cfg.requiredFields || []).map(function (f) { return O.REQUIRABLE_FIELDS[f] || f; }).join(', ') || 'nothing extra') + '.</li>' +
+        (editing && cfg.approvalRequired && editing.approvalState === 'Approved' ? '<li>Changing the <strong>target</strong> or <strong>weight</strong> of an approved item creates an approval request instead of changing it straight away.</li>' : '') + '</ul>';
+      if (!editing) {
+        $('btn-draft').hidden = !cfg.approvalRequired;
+        $('btn-submit-label').textContent = cfg.approvalRequired ? 'Submit for approval' : 'Create';
+      }
+      var ai = $('ai-help');
+      if (ai) ai.hidden = !(lvl === 'Objective' || lvl === 'KeyResult');
+    }
+    function syncWeight() {
+      var parent = O.okr($('parentId').value);
+      var w = Number($('weight').value) || 0;
+      var box = $('weight-help');
+      if (!parent) { box.innerHTML = '<p style="margin:0">Goals sit at the top. Their progress is the weighted average of their objectives.</p>'; $('weight-hint').textContent = ''; return; }
+      var sibs = O.children(parent.id).filter(function (s) { return s.approvalState !== 'Rejected' && (!editing || s.id !== editing.id); });
+      var total = sibs.reduce(function (s, x) { return s + (Number(x.weight) || 0); }, 0) + w;
+      var share = total ? (w / total) * 100 : 0;
+      $('weight-hint').textContent = 'Carries ' + Math.round(share) + '% of ' + parent.code + '’s progress.';
+      box.innerHTML = '<p style="margin-block-start:0">' + esc(parent.code) + ' progress = Σ(child progress × weight) ÷ Σ(weights).</p>' +
+        U.hbars(sibs.map(function (s) { return { label: s.code, value: total ? (s.weight / total) * 100 : 0, status: 'NotStarted', tip: s.code + ': weight ' + s.weight }; })
+          .concat([{ label: (editing ? editing.code : 'This item') + ' (this)', value: share, status: 'brand', tip: 'This item: weight ' + w }]));
+    }
+
+    syncParent(); syncTeams(); syncMeasured(); syncRequired(); syncWeight();
+    $('level').addEventListener('change', function () {
+      var lvl = $('level').value;
+      $('measurementType').value = (lvl === 'Goal' || lvl === 'Objective') ? 'RolledUp' : lvl === 'KeyResult' ? 'Numeric' : 'Percentage';
+      syncParent(); syncMeasured(); syncRequired(); syncWeight();
+    });
+    $('parentId').addEventListener('change', function () {
+      var par = O.okr($('parentId').value);
+      if (par && !editing && !$('departmentId').value) { $('departmentId').value = par.departmentId; syncTeams(); }
+      syncWeight();
+    });
+    $('departmentId').addEventListener('change', syncTeams);
+    $('measurementType').addEventListener('change', function () { syncMeasured(); syncRequired(); if ($('measurementType').value === 'Percentage' && !$('unit').value) $('unit').value = '%'; });
+    $('weight').addEventListener('input', syncWeight);
+    var aiBtn = $('ai-btn');
+    if (aiBtn) aiBtn.addEventListener('click', function () {
+      var lvl = $('level').value;
+      U.setAiContext({ feature: lvl === 'KeyResult' ? 'suggestKeyResults' : 'draftObjective', okrId: lvl === 'KeyResult' ? $('parentId').value : '' });
+      var b = $('ai-open');
+      if (b) { if (!$('ai-drawer').hidden) b.click(); b.click(); }
+      var topic = $('ai-topic');
+      if (topic && lvl === 'Objective') topic.value = $('title').value;
+    });
+
+    // ---------- validate and save
+    function readValues() {
+      var lvl = $('level').value;
+      var rolled = $('measurementType').value === 'RolledUp';
+      var out = {
+        level: lvl, parentId: O.parentLevel(lvl) ? $('parentId').value : null, title: $('title').value.trim(), description: $('description').value.trim(),
+        ownerId: $('ownerId').value, departmentId: $('departmentId').value, teamId: $('teamId').value || null, visibility: $('visibility').value,
+        measurementType: $('measurementType').value, weight: Number($('weight').value), startDate: $('startDate').value, dueDate: $('dueDate').value,
+      };
+      if (rolled) { out.unit = '%'; out.baseline = 0; out.target = 100; }
+      else { out.unit = $('unit').value.trim(); out.baseline = $('baseline').value === '' ? '' : Number($('baseline').value); out.target = $('target').value === '' ? '' : Number($('target').value); }
+      return out;
+    }
+    function validate(val) {
+      var errs = {};
+      var req = requiredFields();
+      req.forEach(function (k) { if (val[k] === '' || val[k] === null || val[k] === undefined || (typeof val[k] === 'number' && isNaN(val[k]))) errs[k] = 'Required.'; });
+      if (val.title && val.title.length < 10) errs.title = 'Use at least 10 characters.';
+      if (!errs.weight && (val.weight < 0 || val.weight > 100)) errs.weight = 'Enter a weight from 0 to 100.';
+      if (val.startDate && val.dueDate && val.dueDate < val.startDate) errs.dueDate = 'The due date must be on or after the start date.';
+      if (!val.dueDate && !errs.dueDate) val.dueDate = cycle.endDate;
+      if (val.measurementType !== 'RolledUp' && val.target !== '' && val.baseline !== '' && val.target === val.baseline && val.measurementType !== 'Milestone') errs.target = 'The target must differ from the baseline.';
+      return errs;
+    }
+    var labels = { level: 'Level', parentId: 'Parent', title: 'Title', description: 'Description', ownerId: 'Owner', departmentId: 'Department', teamId: 'Team', visibility: 'Visibility', measurementType: 'Measured as', unit: 'Unit', baseline: 'Baseline', target: 'Target', weight: 'Weight', startDate: 'Start date', dueDate: 'Due date' };
+    function showErrors(errs) {
+      Object.keys(labels).forEach(function (k) {
+        var e = $(k + '-err'), c = $(k);
+        if (!e || !c) return;
+        if (errs[k]) { e.textContent = errs[k]; e.hidden = false; c.setAttribute('aria-invalid', 'true'); c.setAttribute('aria-describedby', k + '-err'); }
+        else { e.hidden = true; c.removeAttribute('aria-invalid'); c.setAttribute('aria-describedby', k + '-hint'); }
+      });
+      var keys = Object.keys(errs);
+      var sum = $('err-summary');
+      if (!keys.length) { sum.hidden = true; return; }
+      sum.innerHTML = '<strong>Please fix ' + keys.length + ' problem' + (keys.length > 1 ? 's' : '') + ':</strong><ul style="margin:4px 0 0">' + keys.map(function (k) { return '<li><a href="#' + k + '">' + esc(labels[k]) + ': ' + esc(errs[k]) + '</a></li>'; }).join('') + '</ul>';
+      sum.hidden = false;
+      sum.focus();
+    }
+    var mode = 'submit';
+    document.querySelectorAll('[data-mode]').forEach(function (b) { b.addEventListener('click', function () { mode = b.getAttribute('data-mode'); }); });
+    $('form').addEventListener('submit', function (e) {
+      e.preventDefault();
+      var val = readValues();
+      var errs = validate(val);
+      showErrors(errs);
+      if (Object.keys(errs).length) return;
+      if (editing) {
+        delete val.level;
+        var res = O.updateOkr(editing.id, val);
+        var msg = res.changed.length ? 'Changes saved' : 'No changes to save';
+        U.flash(msg, 'success', res.requests.length ? res.requests.length + ' change(s) sent for approval: ' + res.requests.map(function (r) { return O.REQUEST_TYPES[r.requestType].toLowerCase(); }).join(', ') + '.' : undefined);
+        window.location.href = 'okr.html?id=' + encodeURIComponent(editing.id);
+      } else {
+        var created = O.createOkr(val, mode === 'submit');
+        var cfg = O.levelConfig(created.level);
+        U.flash(created.code + ' created', 'success', cfg.approvalRequired ? (mode === 'submit' ? 'Sent to the ' + O.ROLE_LABELS[cfg.approverRole] + ' for approval.' : 'Saved as a draft.') : 'It is active now.');
+        window.location.href = 'okr.html?id=' + encodeURIComponent(created.id);
+      }
+    });
+  })();
+  </script>
+</body>
+</html>

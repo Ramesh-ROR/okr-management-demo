@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Administration · OKR Management System</title>
+  <link rel="icon" href="assets/img/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="assets/css/styles.css">
+</head>
+<body>
+  <div id="app" class="app"><noscript><p>This demo needs JavaScript. Please enable it and reload the page.</p></noscript></div>
+  <script src="assets/js/data.js"></script>
+  <script src="assets/js/core.js"></script>
+  <script src="assets/js/ui.js"></script>
+  <script>
+  (function () {
+    'use strict';
+    var O = window.OKR, U = O.ui, esc = O.esc;
+    var main = U.shell('admin', 'Administration');
+    if (!main) return;
+    var cfg = O.db.config;
+    var $ = function (x) { return document.getElementById(x); };
+    var SCOPES = ['okr.read', 'okr.write', 'checkin.read', 'checkin.write', 'report.read'];
+    var DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday'];
+    var roleOpts = O.ROLES.map(function (r) { return { value: r, label: O.ROLE_LABELS[r] }; });
+    var deptOpts = O.db.departments.map(function (d) { return { value: d.id, label: d.name }; });
+    var audit = { action: '', actor: '', q: '' };
+
+    var tab = function (key, label) { return '<button type="button" role="tab" id="tab-' + key + '" data-tab="' + key + '" aria-controls="panel-' + key + '">' + label + '</button>'; };
+    var panel = function (key) { return '<div role="tabpanel" id="panel-' + key + '" data-panel="' + key + '" aria-labelledby="tab-' + key + '"></div>'; };
+    main.innerHTML = U.pageHeader({ title: 'Administration', subtitle: 'Configure levels, reminders, roles, AI Assist and API access. Every change is written to the audit log.' }) +
+      '<section id="tabs"><div class="tablist" role="tablist" aria-label="Administration areas">' +
+      tab('levels', 'Levels and approvals') + tab('reminders', 'Reminders') + tab('roles', 'Roles') + tab('audit', 'Audit log') + tab('ai', 'AI Assist') + tab('api', 'API access') + tab('demo', 'Demo data') + '</div>' +
+      ['levels', 'reminders', 'roles', 'audit', 'ai', 'api', 'demo'].map(panel).join('') + '</section>';
+
+    // ---------------------------------------------------------------- levels
+    function renderLevels() {
+      $('panel-levels').innerHTML = '<p class="muted">Which levels need approval, who approves them and which fields are mandatory on the create form.</p>' +
+        '<form id="levels-form" class="card" style="padding:0" novalidate><div class="table-wrap"><table class="data"><thead><tr><th scope="col">Level</th><th scope="col">Approval required</th><th scope="col">Approver</th><th scope="col">Required fields</th></tr></thead><tbody>' +
+        cfg.levels.map(function (l) {
+          return '<tr><th scope="row"><strong>' + esc(l.displayName) + '</strong></th>' +
+            '<td><label class="check"><input type="checkbox" data-l="' + l.id + '" data-k="approvalRequired"' + (l.approvalRequired ? ' checked' : '') + '> Yes<span class="sr-only"> for ' + esc(l.displayName) + '</span></label></td>' +
+            '<td><label class="sr-only" for="appr-' + l.id + '">Approver for ' + esc(l.displayName) + '</label><select id="appr-' + l.id + '" data-l="' + l.id + '" data-k="approverRole">' + U.selectOptions(roleOpts.filter(function (r) { return r.value !== 'PlatformAdmin'; }), l.approverRole) + '</select></td>' +
+            '<td><fieldset style="border:0;padding:0"><legend class="sr-only">Required fields for ' + esc(l.displayName) + '</legend><div class="radio-row">' + Object.keys(O.REQUIRABLE_FIELDS).map(function (f) {
+              return '<label><input type="checkbox" data-l="' + l.id + '" data-f="' + f + '"' + (l.requiredFields.indexOf(f) >= 0 ? ' checked' : '') + '> ' + esc(O.REQUIRABLE_FIELDS[f]) + '</label>';
+            }).join('') + '</div></fieldset></td></tr>';
+        }).join('') + '</tbody></table></div><div class="form-footer" style="padding:12px 16px"><button type="submit" class="btn btn-primary">' + U.icon('check') + '<span>Save level settings</span></button></div></form>';
+      $('levels-form').addEventListener('submit', function (e) {
+        e.preventDefault();
+        cfg.levels.forEach(function (l) {
+          var patch = {
+            approvalRequired: document.querySelector('[data-l="' + l.id + '"][data-k="approvalRequired"]').checked,
+            approverRole: document.querySelector('[data-l="' + l.id + '"][data-k="approverRole"]').value,
+            requiredFields: Array.prototype.slice.call(document.querySelectorAll('[data-l="' + l.id + '"][data-f]:checked')).map(function (c) { return c.getAttribute('data-f'); }),
+          };
+          var changed = patch.approvalRequired !== l.approvalRequired || patch.approverRole !== l.approverRole || patch.requiredFields.join() !== l.requiredFields.join();
+          if (changed) O.updateLevel(l.id, patch);
+        });
+        U.toast('Level settings saved', 'success', 'New items use these rules from now on.');
+        renderAudit();
+      });
+    }
+
+    // ---------------------------------------------------------------- reminders
+    function renderReminders() {
+      var r = cfg.reminders;
+      $('panel-reminders').innerHTML = '<form id="rem-form" class="card stack" style="max-inline-size:760px" novalidate><div class="form-grid">' +
+        '<label class="field"><span class="field-label">Check-in cadence</span><select id="r-cad">' + U.selectOptions(['Weekly', 'Fortnightly', 'Monthly'], r.checkInCadence) + '</select></label>' +
+        '<label class="field"><span class="field-label">Reminder day</span><select id="r-day">' + U.selectOptions(DAYS, r.reminderDay) + '</select></label>' +
+        '<label class="field"><span class="field-label">“Due soon” window (days)</span><input type="number" min="1" max="60" id="r-due" value="' + r.dueSoonDays + '"></label>' +
+        '<label class="field"><span class="field-label">Flag as stale after (days without check-in)</span><input type="number" min="7" max="120" id="r-stale" value="' + r.staleAfterDays + '"></label>' +
+        '<label class="check full"><input type="checkbox" id="r-esc"' + (r.escalationEnabled ? ' checked' : '') + '> Escalate items that are not updated</label>' +
+        '<label class="field"><span class="field-label">Escalate after (days)</span><input type="number" min="1" max="90" id="r-esc-days" value="' + r.escalateAfterDays + '"></label>' +
+        '<label class="field"><span class="field-label">Escalate to</span><select id="r-esc-to">' + U.selectOptions(roleOpts.filter(function (x) { return x.value !== 'PlatformAdmin'; }), r.escalateToRole) + '</select></label>' +
+        '</div><span class="error" id="r-err" hidden></span><div class="form-footer"><button type="submit" class="btn btn-primary">' + U.icon('check') + '<span>Save reminder policy</span></button></div></form>';
+      var sync = function () { $('r-esc-days').disabled = $('r-esc-to').disabled = !$('r-esc').checked; };
+      $('r-esc').addEventListener('change', sync);
+      sync();
+      $('rem-form').addEventListener('submit', function (e) {
+        e.preventDefault();
+        var due = Number($('r-due').value), stale = Number($('r-stale').value), escDays = Number($('r-esc-days').value);
+        var err = !(due >= 1 && due <= 60) ? '“Due soon” must be 1–60 days.' : !(stale >= 7 && stale <= 120) ? 'Stale must be 7–120 days.' : !(escDays >= 1 && escDays <= 90) ? 'Escalation must be 1–90 days.' : '';
+        $('r-err').textContent = err;
+        $('r-err').hidden = !err;
+        if (err) return;
+        O.updateReminders({ checkInCadence: $('r-cad').value, reminderDay: $('r-day').value, dueSoonDays: due, staleAfterDays: stale, escalationEnabled: $('r-esc').checked, escalateAfterDays: escDays, escalateToRole: $('r-esc-to').value });
+        U.toast('Reminder policy saved', 'success', 'Stale and due-soon flags are recalculated across the app.');
+        renderAudit();
+      });
+    }
+
+    // ---------------------------------------------------------------- roles
+    function renderRoles() {
+      var list = O.db.roleAssignments.slice().sort(function (a, b) { return O.ROLES.indexOf(a.role) - O.ROLES.indexOf(b.role); });
+      $('panel-roles').innerHTML = '<div class="grid" style="grid-template-columns:minmax(0,2fr) minmax(260px,1fr);align-items:start">' +
+        '<div class="card" style="padding:0"><div class="table-wrap"><table class="data"><thead><tr><th scope="col">Person</th><th scope="col">Role</th><th scope="col">Scope</th><th scope="col"><span class="sr-only">Remove</span></th></tr></thead><tbody>' +
+        list.map(function (ra) {
+          var u = O.user(ra.userId);
+          return '<tr><td>' + U.person(ra.userId, true) + '</td><td>' + esc(O.ROLE_LABELS[ra.role]) + '</td><td class="small">' + esc(ra.departmentId ? O.dept(ra.departmentId).name : 'Whole division') + '</td>' +
+            '<td><button type="button" class="btn btn-sm btn-subtle" data-remove="' + esc(ra.id) + '" aria-label="Remove ' + esc(O.ROLE_LABELS[ra.role]) + ' role from ' + esc(u ? u.displayName : '') + '">Remove</button></td></tr>';
+        }).join('') + '</tbody></table></div></div>' +
+        '<form id="role-form" class="card stack" novalidate><h2 class="card-title">Assign a role</h2>' +
+        '<label class="field"><span class="field-label">Person</span><select id="ra-user">' + U.selectOptions(O.db.users.map(function (u) { return { value: u.id, label: u.displayName }; }), '', 'Choose a person') + '</select></label>' +
+        '<label class="field"><span class="field-label">Role</span><select id="ra-role">' + U.selectOptions(roleOpts) + '</select></label>' +
+        '<label class="field"><span class="field-label">Department scope</span><select id="ra-dept">' + U.selectOptions(deptOpts, '', 'Whole division') + '</select><span class="hint">Coordinators and OKR champions need a department.</span></label>' +
+        '<span class="error" id="ra-err" hidden></span><button type="submit" class="btn btn-primary">' + U.icon('plus') + '<span>Assign role</span></button></form></div>';
+      $('role-form').addEventListener('submit', function (e) {
+        e.preventDefault();
+        var u = $('ra-user').value, r = $('ra-role').value, d = $('ra-dept').value;
+        var err = !u ? 'Choose a person.' : ((r === 'DepartmentCoordinator' || r === 'OkrChampion') && !d) ? 'This role needs a department.' :
+          O.db.roleAssignments.some(function (x) { return x.userId === u && x.role === r && (x.departmentId || '') === d; }) ? 'This person already has that role.' : '';
+        $('ra-err').textContent = err;
+        $('ra-err').hidden = !err;
+        if (err) return;
+        O.addRoleAssignment(u, r, d);
+        U.toast('Role assigned', 'success');
+        renderRoles();
+        renderAudit();
+      });
+      $('panel-roles').querySelectorAll('[data-remove]').forEach(function (b) {
+        b.addEventListener('click', function () {
+          var ra = O.db.roleAssignments.filter(function (x) { return x.id === b.getAttribute('data-remove'); })[0];
+          U.dialog({
+            title: 'Remove role?',
+            body: '<p>Remove the ' + esc(O.ROLE_LABELS[ra.role]) + ' role from ' + esc(O.user(ra.userId).displayName) + '?</p>',
+            okLabel: 'Remove', okClass: 'btn-danger',
+            onOk: function () { O.removeRoleAssignment(ra.id); U.toast('Role removed', 'success'); renderRoles(); renderAudit(); },
+          });
+        });
+      });
+    }
+
+    // ---------------------------------------------------------------- audit log
+    function auditRows() {
+      return O.db.audit.slice().sort(function (a, b) { return a.timestamp < b.timestamp ? 1 : -1; }).filter(function (e) {
+        var q = audit.q.toLowerCase();
+        return (!audit.action || e.action === audit.action) && (!audit.actor || e.actorId === audit.actor) &&
+          (!q || (e.entityName + ' ' + e.details).toLowerCase().indexOf(q) >= 0);
+      });
+    }
+    function renderAudit() {
+      var actions = O.db.audit.map(function (e) { return e.action; }).filter(function (a, i, arr) { return arr.indexOf(a) === i; }).sort();
+      var actors = O.db.users.filter(function (u) { return O.db.audit.some(function (e) { return e.actorId === u.id; }); });
+      var rows = auditRows();
+      $('panel-audit').innerHTML = '<form class="filters" id="audit-filters" aria-label="Filter audit log">' +
+        '<label class="field field-grow"><span class="field-label">Search</span><input type="search" id="a-q" value="' + esc(audit.q) + '" placeholder="Item or detail"></label>' +
+        '<label class="field"><span class="field-label">Action</span><select id="a-action">' + U.selectOptions(actions, audit.action, 'All actions') + '</select></label>' +
+        '<label class="field"><span class="field-label">By</span><select id="a-actor">' + U.selectOptions(actors.map(function (u) { return { value: u.id, label: u.displayName }; }), audit.actor, 'Anyone') + '</select></label>' +
+        '<button type="button" class="btn" id="a-export">' + U.icon('download') + '<span>Export CSV</span></button></form>' +
+        '<p class="muted" aria-live="polite">' + rows.length + ' of ' + O.db.audit.length + ' events. The log is append-only: entries cannot be edited or deleted.</p>' +
+        '<div class="card" style="padding:0"><div class="table-wrap"><table class="data"><thead><tr><th scope="col">When</th><th scope="col">By</th><th scope="col">Action</th><th scope="col">Record</th><th scope="col">Details</th></tr></thead><tbody>' +
+        rows.map(function (e) {
+          return '<tr><td class="nowrap small">' + O.fmtDateTime(e.timestamp) + '</td><td class="nowrap small">' + esc((O.user(e.actorId) || {}).displayName || 'System') + '</td><td><span class="chip">' + esc(e.action) + '</span></td>' +
+            '<td class="small">' + esc(e.entityName) + '<div class="muted">' + esc(e.entityType) + '</div></td><td class="small">' + esc(e.details) + '</td></tr>';
+        }).join('') + '</tbody></table></div></div>';
+      $('a-q').addEventListener('input', function (e) { audit.q = e.target.value; var pos = e.target.selectionStart; renderAudit(); $('a-q').focus(); $('a-q').setSelectionRange(pos, pos); });
+      $('a-action').addEventListener('change', function (e) { audit.action = e.target.value; renderAudit(); $('a-action').focus(); });
+      $('a-actor').addEventListener('change', function (e) { audit.actor = e.target.value; renderAudit(); $('a-actor').focus(); });
+      $('audit-filters').addEventListener('submit', function (e) { e.preventDefault(); });
+      $('a-export').addEventListener('click', function () {
+        var list = auditRows();
+        O.downloadCsv('okr-audit-log.csv', O.toCsv(list, [
+          { label: 'Timestamp (UTC)', value: function (e) { return e.timestamp; } },
+          { label: 'By', value: function (e) { return (O.user(e.actorId) || {}).displayName || 'System'; } },
+          { label: 'Action', value: function (e) { return e.action; } },
+          { label: 'Table', value: function (e) { return e.entityType; } },
+          { label: 'Record', value: function (e) { return e.entityName; } },
+          { label: 'Details', value: function (e) { return e.details; } },
+        ]));
+        O.logExport('Audit log');
+        U.toast('Exported ' + list.length + ' events to CSV', 'success');
+        renderAudit();
+      });
+    }
+
+    // ---------------------------------------------------------------- AI settings
+    function renderAi() {
+      var f = cfg.ai.features;
+      $('panel-ai').innerHTML = '<form id="ai-settings" class="card stack" style="max-inline-size:640px" novalidate>' +
+        '<label class="check"><input type="checkbox" id="ai-on"' + (cfg.ai.enabled ? ' checked' : '') + '> <strong>Enable AI Assist for all users</strong></label>' +
+        '<fieldset id="ai-feats"><legend>Features</legend><div class="stack-sm">' +
+        '<label class="check"><input type="checkbox" data-feat="draftObjective"' + (f.draftObjective ? ' checked' : '') + '> Draft an objective from a rough idea</label>' +
+        '<label class="check"><input type="checkbox" data-feat="suggestKeyResults"' + (f.suggestKeyResults ? ' checked' : '') + '> Suggest measurable key results</label>' +
+        '<label class="check"><input type="checkbox" data-feat="summariseCheckIns"' + (f.summariseCheckIns ? ' checked' : '') + '> Summarise check-in history</label></div></fieldset>' +
+        '<p class="msg msg-info small" style="margin:0">In this demo the suggestions are pre-written. In production they would come from an approved AI service, with a person always confirming before anything is saved.</p>' +
+        '<div class="form-footer"><button type="submit" class="btn btn-primary">' + U.icon('check') + '<span>Save AI settings</span></button></div></form>';
+      var sync = function () { $('ai-feats').disabled = !$('ai-on').checked; };
+      $('ai-on').addEventListener('change', sync);
+      sync();
+      $('ai-settings').addEventListener('submit', function (e) {
+        e.preventDefault();
+        var feats = {};
+        document.querySelectorAll('[data-feat]').forEach(function (c) { feats[c.getAttribute('data-feat')] = c.checked; });
+        O.updateAi({ enabled: $('ai-on').checked, features: feats });
+        U.flash('AI settings saved', 'success', 'The AI Assist button reflects the new settings.');
+        window.location.reload();
+      });
+    }
+
+    // ---------------------------------------------------------------- API credentials
+    function renderApi() {
+      var list = O.db.apiCredentials;
+      $('panel-api').innerHTML = '<p class="muted">Credentials for systems that read or write OKR data (for example a Power BI refresh). Secrets are shown once when created.</p>' +
+        '<div class="grid" style="grid-template-columns:minmax(0,2fr) minmax(260px,1fr);align-items:start"><div class="card" style="padding:0"><div class="table-wrap"><table class="data"><thead><tr><th scope="col">Name</th><th scope="col">Client ID</th><th scope="col">Scopes</th><th scope="col">Expires</th><th scope="col">Last used</th><th scope="col">Status</th><th scope="col"><span class="sr-only">Action</span></th></tr></thead><tbody>' +
+        list.map(function (c) {
+          return '<tr><td><strong>' + esc(c.name) + '</strong><div class="small muted">Created ' + O.fmtDate(c.createdOn) + '</div></td><td class="small"><code>' + esc(c.clientId.slice(0, 8)) + '…</code></td><td class="small">' + esc(c.scopes.join(', ')) + '</td>' +
+            '<td class="nowrap small">' + O.fmtDate(c.expiresOn) + '</td><td class="nowrap small">' + (c.lastUsedOn ? O.fmtRelative(c.lastUsedOn) : 'Never') + '</td>' +
+            '<td><span class="chip ' + (c.status === 'Active' ? 'dec-Approved' : 'dec-Rejected') + '">' + esc(c.status) + '</span></td>' +
+            '<td>' + (c.status === 'Active' ? '<button type="button" class="btn btn-sm btn-subtle" data-revoke="' + esc(c.id) + '" aria-label="Revoke ' + esc(c.name) + '">Revoke</button>' : '') + '</td></tr>';
+        }).join('') + '</tbody></table></div></div>' +
+        '<form id="api-form" class="card stack" novalidate><h2 class="card-title">New credential</h2>' +
+        '<label class="field"><span class="field-label">Name</span><input type="text" id="api-name" maxlength="80" placeholder="e.g. Data warehouse export"></label>' +
+        '<fieldset><legend>Scopes</legend><div class="stack-sm">' + SCOPES.map(function (s) { return '<label class="check"><input type="checkbox" data-scope="' + s + '"' + (/read$/.test(s) ? ' checked' : '') + '> ' + s + '</label>'; }).join('') + '</div></fieldset>' +
+        '<span class="error" id="api-err" hidden></span><button type="submit" class="btn btn-primary">' + U.icon('plus') + '<span>Create credential</span></button></form></div>';
+      $('api-form').addEventListener('submit', function (e) {
+        e.preventDefault();
+        var name = $('api-name').value.trim();
+        var scopes = Array.prototype.slice.call(document.querySelectorAll('[data-scope]:checked')).map(function (c) { return c.getAttribute('data-scope'); });
+        var err = name.length < 3 ? 'Give the credential a name (3+ characters).' : !scopes.length ? 'Choose at least one scope.' : '';
+        $('api-err').textContent = err;
+        $('api-err').hidden = !err;
+        if (err) return;
+        var res = O.createApiCredential(name, scopes);
+        renderApi();
+        renderAudit();
+        U.dialog({
+          title: 'Credential created',
+          body: '<p>Copy the secret now. It will not be shown again.</p><div class="field"><span class="field-label">Client ID</span><div class="secret">' + esc(res.credential.clientId) + '</div></div>' +
+            '<div class="field"><span class="field-label">Client secret (demo value)</span><div class="secret">' + esc(res.secret) + '</div></div>',
+          cancelLabel: 'Done',
+        });
+      });
+      $('panel-api').querySelectorAll('[data-revoke]').forEach(function (b) {
+        b.addEventListener('click', function () {
+          var c = O.db.apiCredentials.filter(function (x) { return x.id === b.getAttribute('data-revoke'); })[0];
+          U.dialog({
+            title: 'Revoke ' + c.name + '?', body: '<p>Systems using this credential stop working immediately.</p>', okLabel: 'Revoke', okClass: 'btn-danger',
+            onOk: function () { O.revokeApiCredential(c.id); U.toast('Credential revoked', 'success'); renderApi(); renderAudit(); },
+          });
+        });
+      });
+    }
+
+    // ---------------------------------------------------------------- demo data
+    function renderDemo() {
+      $('panel-demo').innerHTML = '<div class="card stack" style="max-inline-size:640px"><h2 class="card-title">About the demo data</h2>' +
+        '<p style="margin:0">All people, projects and figures are fictitious. Changes you make (check-ins, approvals, new items, settings) are kept in this browser only, so you can move between pages and come back later.</p>' +
+        '<dl class="facts"><dt>Items</dt><dd>' + O.db.okrs.length + '</dd><dt>Check-ins</dt><dd>' + O.db.checkins.length + '</dd><dt>Approval requests</dt><dd>' + O.db.approvals.length + '</dd><dt>Audit events</dt><dd>' + O.db.audit.length + '</dd><dt>People</dt><dd>' + O.db.users.length + '</dd></dl>' +
+        '<div><button type="button" class="btn btn-danger" id="reset2">' + U.icon('reset') + '<span>Reset demo data</span></button></div></div>';
+      $('reset2').addEventListener('click', function () { $('reset-demo').click(); });
+    }
+
+    renderLevels(); renderReminders(); renderRoles(); renderAudit(); renderAi(); renderApi(); renderDemo();
+    U.tabs($('tabs'));
+  })();
+  </script>
+</body>
+</html>

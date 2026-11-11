@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OKR Explorer · OKR Management System</title>
+  <link rel="icon" href="assets/img/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="assets/css/styles.css">
+</head>
+<body>
+  <div id="app" class="app"><noscript><p>This demo needs JavaScript. Please enable it and reload the page.</p></noscript></div>
+  <script src="assets/js/data.js"></script>
+  <script src="assets/js/core.js"></script>
+  <script src="assets/js/ui.js"></script>
+  <script>
+  (function () {
+    'use strict';
+    var O = window.OKR, U = O.ui, esc = O.esc;
+    var main = U.shell('explorer', 'OKR Explorer');
+    if (!main) return;
+
+    var all = O.cycleOkrs();
+    var byId = {};
+    all.forEach(function (o) { byId[o.id] = o; });
+    var kids = O.childIndex(all);
+    Object.keys(kids).forEach(function (k) { kids[k].sort(O.levelOrder); });
+    var roots = all.filter(function (o) { return !o.parentId || !byId[o.parentId]; });
+
+    var f = {
+      q: O.param('q') || '', level: O.param('level') || '', dept: O.param('dept') || '', status: O.param('status') || '',
+      owner: O.param('owner') || '', flag: O.param('flag') || '', view: O.param('view') === 'list' ? 'list' : 'tree',
+    };
+    var EXP_KEY = 'okrDemo.explorer.expanded';
+    var expanded = {};
+    try { expanded = JSON.parse(sessionStorage.getItem(EXP_KEY) || 'null'); } catch (e) { expanded = null; }
+    if (!expanded) {
+      expanded = {};
+      all.forEach(function (o) { if (o.level === 'Goal' || o.level === 'Objective') expanded[o.id] = true; });
+    }
+    function saveExpanded() { try { sessionStorage.setItem(EXP_KEY, JSON.stringify(expanded)); } catch (e) { /* ignore */ } }
+
+    var owners = O.db.users.filter(function (u) { return all.some(function (o) { return o.ownerId === u.id; }); })
+      .map(function (u) { return { value: u.id, label: u.displayName }; });
+
+    var head = U.pageHeader({
+      title: 'OKR Explorer',
+      subtitle: 'Goals → objectives → key results → initiatives → action items for ' + esc(O.periodLabel()),
+      actions: '<button type="button" class="btn" id="export">' + U.icon('download') + '<span>Export CSV</span></button>' +
+        (O.can.create() ? '<a class="btn btn-primary" href="okr-edit.html">' + U.icon('plus') + '<span>New OKR</span></a>' : ''),
+    });
+    var filters = '<form class="filters" id="filters" role="search" aria-label="Filter OKRs">' +
+      '<label class="field field-grow"><span class="field-label">Search</span><input type="search" id="f-q" value="' + esc(f.q) + '" placeholder="Title or code"></label>' +
+      '<label class="field"><span class="field-label">Level</span><select id="f-level">' + U.selectOptions(O.LEVELS.map(function (l) { return { value: l, label: O.LEVEL_LABELS[l] }; }), f.level, 'All levels') + '</select></label>' +
+      '<label class="field"><span class="field-label">Department</span><select id="f-dept">' + U.selectOptions(O.db.departments.map(function (d) { return { value: d.id, label: d.name }; }), f.dept, 'All departments') + '</select></label>' +
+      '<label class="field"><span class="field-label">Status</span><select id="f-status">' + U.selectOptions(O.STATUSES.map(function (s) { return { value: s, label: O.STATUS[s].label }; }), f.status, 'All statuses') + '</select></label>' +
+      '<label class="field"><span class="field-label">Owner</span><select id="f-owner">' + U.selectOptions(owners, f.owner, 'Anyone') + '</select></label>' +
+      '<label class="field"><span class="field-label">Flag</span><select id="f-flag">' + U.selectOptions([
+        { value: 'attention', label: 'Needs attention (any)' }, { value: 'overdue', label: 'Overdue' }, { value: 'stale', label: 'No recent check-in' },
+        { value: 'due', label: 'Due soon' }, { value: 'approval', label: 'Pending approval' }], f.flag, 'No flag filter') + '</select></label>' +
+      '<fieldset class="field" style="padding:4px 8px"><legend class="sr-only">View</legend><div class="radio-row">' +
+      '<label><input type="radio" name="view" value="tree"' + (f.view === 'tree' ? ' checked' : '') + '> Tree</label>' +
+      '<label><input type="radio" name="view" value="list"' + (f.view === 'list' ? ' checked' : '') + '> Flat list</label></div></fieldset>' +
+      '<button type="button" class="btn btn-subtle" id="clear">Clear filters</button></form>';
+    main.innerHTML = head + filters + '<div class="row" style="justify-content:space-between;margin-block-end:8px"><p class="muted" id="count" aria-live="polite" style="margin:0"></p>' +
+      '<div class="row" id="tree-tools"><button type="button" class="btn btn-sm btn-subtle" id="expand-all">Expand all</button><button type="button" class="btn btn-sm btn-subtle" id="collapse-all">Collapse all</button></div></div>' +
+      '<div class="card" style="padding:0"><div class="table-wrap" id="table"></div></div>';
+
+    function filtersActive() { return !!(f.q || f.level || f.dept || f.status || f.owner || f.flag); }
+    function matches(o) {
+      if (f.q) {
+        var q = f.q.toLowerCase();
+        if (o.title.toLowerCase().indexOf(q) < 0 && o.code.toLowerCase().indexOf(q) < 0) return false;
+      }
+      if (f.level && o.level !== f.level) return false;
+      if (f.dept && o.departmentId !== f.dept) return false;
+      if (f.status && o.status !== f.status) return false;
+      if (f.owner && o.ownerId !== f.owner) return false;
+      if (f.flag === 'attention' && !(O.isOverdue(o) || O.isStale(o) || O.isDueSoon(o))) return false;
+      if (f.flag === 'overdue' && !O.isOverdue(o)) return false;
+      if (f.flag === 'stale' && !O.isStale(o)) return false;
+      if (f.flag === 'due' && !O.isDueSoon(o)) return false;
+      if (f.flag === 'approval' && o.approvalState === 'Approved') return false;
+      return true;
+    }
+    function weightCell(o) {
+      if (!o.parentId) return '<span class="muted">–</span>';
+      var share = O.weightShare(o);
+      return '<span data-tip="' + esc('Weight ' + o.weight + ' = ' + Math.round(share) + '% of ' + (byId[o.parentId] ? byId[o.parentId].code : 'parent') + '’s progress') + '">' + Math.round(share) + '%</span>';
+    }
+    function rowHtml(o, depth, opts) {
+      var hasKids = (kids[o.id] || []).length > 0;
+      var toggle = opts.tree
+        ? (hasKids ? '<button type="button" class="tree-toggle" data-toggle="' + esc(o.id) + '" aria-expanded="' + (opts.open ? 'true' : 'false') + '" aria-label="' + (opts.open ? 'Collapse ' : 'Expand ') + esc(o.code) + '">' + U.icon('chevron') + '</button>' : '<span class="tree-spacer"></span>')
+        : '';
+      var u = O.user(o.ownerId);
+      var d = O.dept(o.departmentId);
+      return '<tr class="lvl-row-' + o.level + (opts.dimmed ? ' dimmed' : '') + '">' +
+        '<td class="cell-title"><div class="tree-cell" style="padding-inline-start:' + (depth * 22) + 'px">' + toggle + U.levelChip(o.level) + ' ' + U.okrLink(o) + '</div></td>' +
+        '<td class="nowrap">' + U.avatar(o.ownerId, 24) + ' <span class="small">' + esc(u ? u.displayName : '–') + '</span></td>' +
+        '<td class="small" title="' + esc(d ? d.name : '') + '">' + esc(d ? d.code : '–') + '</td>' +
+        '<td style="min-inline-size:150px">' + U.progress(o.progress, o.status, o.code) + '</td>' +
+        '<td>' + U.statusBadge(o.status) + '</td>' +
+        '<td class="num">' + weightCell(o) + '</td>' +
+        '<td class="nowrap small">' + O.fmtDate(o.dueDate) + '</td>' +
+        '<td>' + U.flagChips(o) + '</td></tr>';
+    }
+
+    function render() {
+      var active = filtersActive();
+      var hits = all.filter(matches);
+      var rows = [];
+      if (f.view === 'list') {
+        hits.forEach(function (o) { rows.push(rowHtml(o, 0, { tree: false })); });
+      } else {
+        var hitIds = {};
+        hits.forEach(function (o) { hitIds[o.id] = true; });
+        var keep = {};
+        hits.forEach(function (o) { var c = o; while (c) { keep[c.id] = true; c = byId[c.parentId]; } });
+        var walk = function (o, depth) {
+          if (!keep[o.id]) return;
+          var open = active ? (kids[o.id] || []).some(function (k) { return keep[k.id]; }) : !!expanded[o.id];
+          rows.push(rowHtml(o, depth, { tree: true, open: open, dimmed: active && !hitIds[o.id] }));
+          if (open) (kids[o.id] || []).forEach(function (k) { walk(k, depth + 1); });
+        };
+        roots.forEach(function (r) { walk(r, 0); });
+      }
+      document.getElementById('table').innerHTML = rows.length
+        ? '<table class="data"' + (f.view === 'tree' ? ' aria-label="OKR hierarchy"' : ' aria-label="OKR list"') + '><thead><tr><th scope="col">Item</th><th scope="col">Owner</th><th scope="col">Dept</th><th scope="col">Progress</th><th scope="col">Status</th><th scope="col" class="num">Weight</th><th scope="col">Due</th><th scope="col">Flags</th></tr></thead><tbody>' + rows.join('') + '</tbody></table>'
+        : U.empty('No items match these filters. <button type="button" class="linklike" id="clear2">Clear filters</button>');
+      document.getElementById('count').textContent = active ? 'Showing ' + hits.length + ' matching items of ' + all.length + (f.view === 'tree' ? ' (with their parents for context)' : '') : all.length + ' items';
+      document.getElementById('tree-tools').hidden = f.view !== 'tree' || active;
+      var c2 = document.getElementById('clear2');
+      if (c2) c2.addEventListener('click', clear);
+      syncUrl();
+    }
+    function syncUrl() {
+      var url = new URL(window.location.href);
+      ['q', 'level', 'dept', 'status', 'owner', 'flag'].forEach(function (k) { if (f[k]) url.searchParams.set(k, f[k]); else url.searchParams.delete(k); });
+      if (f.view === 'list') url.searchParams.set('view', 'list'); else url.searchParams.delete('view');
+      try { history.replaceState(null, '', url.toString()); } catch (e) { /* ignore */ }
+    }
+    function clear() {
+      f.q = f.level = f.dept = f.status = f.owner = f.flag = '';
+      ['f-q', 'f-level', 'f-dept', 'f-status', 'f-owner', 'f-flag'].forEach(function (id) { document.getElementById(id).value = ''; });
+      var g = document.getElementById('global-search');
+      if (g) g.value = '';
+      render();
+    }
+
+    var map = { 'f-q': 'q', 'f-level': 'level', 'f-dept': 'dept', 'f-status': 'status', 'f-owner': 'owner', 'f-flag': 'flag' };
+    Object.keys(map).forEach(function (id) {
+      document.getElementById(id).addEventListener(id === 'f-q' ? 'input' : 'change', function (e) { f[map[id]] = e.target.value; render(); });
+    });
+    document.getElementById('filters').addEventListener('submit', function (e) { e.preventDefault(); });
+    document.querySelectorAll('input[name="view"]').forEach(function (r) { r.addEventListener('change', function () { f.view = r.value; render(); }); });
+    document.getElementById('clear').addEventListener('click', clear);
+    document.getElementById('table').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-toggle]');
+      if (!b) return;
+      var id = b.getAttribute('data-toggle');
+      expanded[id] = !expanded[id];
+      saveExpanded();
+      render();
+      var again = document.querySelector('[data-toggle="' + CSS.escape(id) + '"]');
+      if (again) again.focus();
+    });
+    document.getElementById('expand-all').addEventListener('click', function () { all.forEach(function (o) { expanded[o.id] = true; }); saveExpanded(); render(); });
+    document.getElementById('collapse-all').addEventListener('click', function () { expanded = {}; saveExpanded(); render(); });
+    document.getElementById('export').addEventListener('click', function () {
+      var rows = all.filter(matches);
+      var csv = O.toCsv(rows, [
+        { label: 'Code', value: function (o) { return o.code; } },
+        { label: 'Level', value: function (o) { return O.LEVEL_LABELS[o.level]; } },
+        { label: 'Title', value: function (o) { return o.title; } },
+        { label: 'Parent', value: function (o) { var p = O.okr(o.parentId); return p ? p.code : ''; } },
+        { label: 'Owner', value: function (o) { var u = O.user(o.ownerId); return u ? u.displayName : ''; } },
+        { label: 'Department', value: function (o) { var d = O.dept(o.departmentId); return d ? d.name : ''; } },
+        { label: 'Progress %', value: function (o) { return Math.round(o.progress); } },
+        { label: 'Status', value: function (o) { return O.STATUS[o.status].label; } },
+        { label: 'Baseline', value: function (o) { return o.measurementType === 'RolledUp' ? '' : o.baseline; } },
+        { label: 'Current', value: function (o) { return o.measurementType === 'RolledUp' ? '' : o.current; } },
+        { label: 'Target', value: function (o) { return o.measurementType === 'RolledUp' ? '' : o.target; } },
+        { label: 'Unit', value: function (o) { return o.measurementType === 'RolledUp' ? '' : o.unit; } },
+        { label: 'Weight', value: function (o) { return o.weight; } },
+        { label: 'Start', value: function (o) { return o.startDate; } },
+        { label: 'Due', value: function (o) { return o.dueDate; } },
+        { label: 'Last check-in', value: function (o) { return o.lastCheckInOn ? o.lastCheckInOn.slice(0, 10) : ''; } },
+        { label: 'Flags', value: function (o) { return O.flags(o).join('; '); } },
+      ]);
+      O.downloadCsv('okr-explorer-' + O.prefs.period + '.csv', csv);
+      O.logExport('OKR Explorer list');
+      U.toast('Exported ' + rows.length + ' items to CSV', 'success');
+    });
+    render();
+  })();
+  </script>
+</body>
+</html>

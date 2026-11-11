@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Reports · OKR Management System</title>
+  <link rel="icon" href="assets/img/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="assets/css/styles.css">
+</head>
+<body>
+  <div id="app" class="app"><noscript><p>This demo needs JavaScript. Please enable it and reload the page.</p></noscript></div>
+  <script src="assets/js/data.js"></script>
+  <script src="assets/js/core.js"></script>
+  <script src="assets/js/ui.js"></script>
+  <script>
+  (function () {
+    'use strict';
+    var O = window.OKR, U = O.ui, esc = O.esc;
+    var main = U.shell('reports', 'Reports');
+    if (!main) return;
+
+    var all = O.cycleOkrs();
+    var of = function (l) { return all.filter(function (o) { return o.level === l; }); };
+    var goals = of('Goal'), objectives = of('Objective'), krs = of('KeyResult');
+    var krCounts = O.countByStatus(krs), objCounts = O.countByStatus(objectives);
+    var open = all.filter(function (o) { return o.measurementType !== 'RolledUp' && o.status !== 'Completed' && o.status !== 'NotStarted'; });
+
+    // ---------------- executive summary
+    var risks = krs.filter(function (o) { return o.status === 'AtRisk' || o.status === 'OffTrack'; })
+      .map(function (o) { return { o: o, gap: O.expectedProgress(o) - o.progress }; })
+      .sort(function (a, b) { return b.gap - a.gap; }).slice(0, 8);
+    var weeks = O.checkInsPerWeek(10);
+    var exec = '<div class="grid grid-kpi" style="margin-block-end:16px">' +
+      U.kpi('Average goal progress', O.pct(O.avg(goals, function (g) { return g.progress; })), goals.length + ' goals', 'info') +
+      U.kpi('Objectives on track', ((objCounts.OnTrack || 0) + (objCounts.Completed || 0)) + ' / ' + objectives.length, (objCounts.AtRisk || 0) + ' at risk · ' + (objCounts.OffTrack || 0) + ' off track') +
+      U.kpi('Key results completed', (krCounts.Completed || 0) + ' / ' + krs.length, O.pct(krs.length ? ((krCounts.Completed || 0) / krs.length) * 100 : 0) + ' of key results') +
+      U.kpi('Overdue items', all.filter(O.isOverdue).length, 'Past due date, not complete', 'bad') + '</div>' +
+      '<div class="grid grid-2" style="margin-block-end:16px">' +
+      U.chartCard({
+        id: 'goals', title: 'Goal progress', desc: 'Weighted roll-up; colour shows status',
+        chart: U.hbars(goals.map(function (g) { return { label: g.code + ' ' + g.title, value: g.progress, status: g.status, href: 'okr.html?id=' + g.id, tip: g.code + ': ' + Math.round(g.progress) + '% · ' + O.STATUS[g.status].label }; })) +
+          '<p class="chart-key">' + ['OnTrack', 'AtRisk', 'OffTrack', 'Completed'].map(function (s) { return '<span class="swatch" style="background:' + O.STATUS[s].color + '"></span>' + O.STATUS[s].label; }).join(' ') + '</p>',
+        table: U.simpleTable(['Goal', 'Progress', 'Status'], goals.map(function (g) { return [esc(g.code + ' ' + g.title), Math.round(g.progress) + '%', esc(O.STATUS[g.status].label)]; }), 'Goal progress'),
+      }) +
+      U.chartCard({ id: 'kr-donut', title: 'Key results by status', desc: krs.length + ' key results', chart: U.statusDonut(krCounts, 'key results'), table: U.statusTable(krCounts) }) +
+      U.chartCard({
+        id: 'weekly', title: 'Check-ins per week', desc: 'Last 10 weeks, all departments',
+        chart: U.vbars(weeks, 'check-ins'),
+        table: U.simpleTable(['Week starting', 'Check-ins'], weeks.map(function (w) { return [esc(w.label), w.value]; }), 'Check-ins per week'),
+      }) +
+      U.chartCard({ id: 'obj-donut', title: 'Objectives by status', desc: objectives.length + ' objectives', chart: U.statusDonut(objCounts, 'objectives'), table: U.statusTable(objCounts) }) +
+      '</div>' +
+      '<section class="card" aria-labelledby="risk-h"><div class="card-head"><div><h2 class="card-title" id="risk-h">Top risks</h2><p class="card-desc">Key results furthest behind their expected progress</p></div></div>' +
+      (risks.length ? '<div class="table-wrap"><table class="data"><thead><tr><th scope="col">Key result</th><th scope="col">Owner</th><th scope="col">Progress</th><th scope="col" class="num">Expected</th><th scope="col" class="num">Gap</th><th scope="col">Status</th></tr></thead><tbody>' +
+        risks.map(function (r) {
+          return '<tr><td class="cell-title">' + U.okrLink(r.o) + '</td><td class="nowrap small">' + esc((O.user(r.o.ownerId) || {}).displayName || '–') + '</td><td style="min-inline-size:150px">' + U.progress(r.o.progress, r.o.status, r.o.code) + '</td>' +
+            '<td class="num">' + Math.round(O.expectedProgress(r.o)) + '%</td><td class="num">−' + Math.round(r.gap) + '</td><td>' + U.statusBadge(r.o.status) + '</td></tr>';
+        }).join('') + '</tbody></table></div>' : U.empty('No key results at risk.')) + '</section>';
+
+    // ---------------- operational
+    var ops = '<form class="filters" id="ops-filters" aria-label="Filter operational report">' +
+      '<label class="field"><span class="field-label">Department</span><select id="o-dept">' + U.selectOptions(O.db.departments.map(function (d) { return { value: d.id, label: d.name }; }), '', 'All departments') + '</select></label>' +
+      '<label class="field"><span class="field-label">Level</span><select id="o-level">' + U.selectOptions(['KeyResult', 'Initiative', 'ActionItem'].map(function (l) { return { value: l, label: O.LEVEL_LABELS[l] }; }), '', 'Key results, initiatives and actions') + '</select></label>' +
+      '<label class="field"><span class="field-label">Status</span><select id="o-status">' + U.selectOptions(O.STATUSES.map(function (s) { return { value: s, label: O.STATUS[s].label }; }), '', 'All statuses') + '</select></label>' +
+      '<button type="button" class="btn" id="ops-export">' + U.icon('download') + '<span>Export CSV</span></button></form>' +
+      '<p class="muted" id="ops-count" aria-live="polite"></p><div class="card" style="padding:0"><div class="table-wrap" id="ops-table"></div></div>';
+
+    // ---------------- compliance
+    var comp = O.db.departments.map(function (d) {
+      var items = open.filter(function (o) { return o.departmentId === d.id; });
+      var recent = items.filter(function (o) { var n = O.daysSince(o.lastCheckInOn); return n !== null && n <= 14; }).length;
+      return { d: d, items: items.length, recent: recent, rate: items.length ? (recent / items.length) * 100 : 0, stale: items.filter(O.isStale).length, overdue: all.filter(function (o) { return o.departmentId === d.id && O.isOverdue(o); }).length };
+    });
+    var compliance = '<div class="grid grid-2" style="margin-block-end:16px">' +
+      U.chartCard({
+        id: 'comp', title: 'Check-in compliance by department', desc: 'Open measured items with a check-in in the last 14 days',
+        chart: U.hbars(comp.map(function (c) { return { label: c.d.name, value: c.rate, sub: c.recent + ' of ' + c.items + ' items', status: c.rate >= 80 ? 'OnTrack' : c.rate >= 60 ? 'AtRisk' : 'OffTrack', tip: c.d.name + ': ' + c.recent + ' of ' + c.items + ' items checked in within 14 days' }; })) +
+          '<p class="chart-key"><span class="swatch" style="background:' + O.STATUS.OnTrack.color + '"></span>80% or more <span class="swatch" style="background:' + O.STATUS.AtRisk.color + '"></span>60–79% <span class="swatch" style="background:' + O.STATUS.OffTrack.color + '"></span>Below 60%</p>',
+        table: U.simpleTable(['Department', 'Open items', 'Checked in (14 days)', 'Rate'], comp.map(function (c) { return [esc(c.d.name), c.items, c.recent, Math.round(c.rate) + '%']; }), 'Check-in compliance'),
+      }) +
+      '<section class="card" aria-labelledby="hyg-h"><h2 class="card-title" id="hyg-h" style="margin-block-end:12px">Data hygiene</h2>' +
+      U.simpleTable(['Department', 'No recent check-in (' + O.db.config.reminders.staleAfterDays + '+ days)', 'Overdue'], comp.map(function (c) {
+        return [esc(c.d.name), '<a href="explorer.html?dept=' + c.d.id + '&flag=stale">' + c.stale + '</a>', '<a href="explorer.html?dept=' + c.d.id + '&flag=overdue">' + c.overdue + '</a>'];
+      }), 'Stale and overdue items by department') +
+      '<p class="small muted" style="margin-block-start:10px">Reminders go out every ' + esc(O.db.config.reminders.reminderDay) + '. ' + (O.db.config.reminders.escalationEnabled ? 'Items without an update for ' + O.db.config.reminders.escalateAfterDays + ' days are escalated to the ' + esc(O.ROLE_LABELS[O.db.config.reminders.escalateToRole]) + '.' : 'Escalation is off.') + '</p></section></div>';
+
+    var tab = function (key, label) { return '<button type="button" role="tab" id="tab-' + key + '" data-tab="' + key + '" aria-controls="panel-' + key + '">' + label + '</button>'; };
+    var panel = function (key, html) { return '<div role="tabpanel" id="panel-' + key + '" data-panel="' + key + '" aria-labelledby="tab-' + key + '">' + html + '</div>'; };
+    main.innerHTML = U.pageHeader({
+      title: 'Reports',
+      subtitle: esc(O.periodLabel()) + ' · data as of ' + O.fmtDate(O.asOf.toISOString()),
+      actions: '<button type="button" class="btn" id="print">' + U.icon('print') + '<span>Print or save as PDF</span></button>',
+    }) +
+    '<section id="tabs"><div class="tablist" role="tablist" aria-label="Report">' + tab('exec', 'Executive summary') + tab('ops', 'Operational detail') + tab('comp', 'Check-in compliance') + '</div>' +
+    panel('exec', exec) + panel('ops', ops) + panel('comp', compliance) + '</section>';
+    U.tabs(document.getElementById('tabs'));
+
+    // operational table behaviour
+    var $ = function (x) { return document.getElementById(x); };
+    function opsRows() {
+      var dept = $('o-dept').value, level = $('o-level').value, status = $('o-status').value;
+      return all.filter(function (o) {
+        return (level ? o.level === level : ['KeyResult', 'Initiative', 'ActionItem'].indexOf(o.level) >= 0) && (!dept || o.departmentId === dept) && (!status || o.status === status);
+      });
+    }
+    function renderOps() {
+      var rows = opsRows();
+      $('ops-count').textContent = rows.length + ' items';
+      $('ops-table').innerHTML = rows.length ? '<table class="data"><thead><tr><th scope="col">Item</th><th scope="col">Dept</th><th scope="col">Owner</th><th scope="col" class="num">Current</th><th scope="col" class="num">Target</th><th scope="col">Progress</th><th scope="col">Status</th><th scope="col">Last check-in</th><th scope="col">Due</th></tr></thead><tbody>' +
+        rows.map(function (o) {
+          var rolled = o.measurementType === 'RolledUp';
+          return '<tr><td class="cell-title">' + U.levelChip(o.level) + ' ' + U.okrLink(o) + ' ' + U.flagChips(o) + '</td><td class="small">' + esc((O.dept(o.departmentId) || {}).code || '–') + '</td><td class="nowrap small">' + esc((O.user(o.ownerId) || {}).displayName || '–') + '</td>' +
+            '<td class="num nowrap">' + (rolled ? '–' : esc(O.fmtValue(o, o.current))) + '</td><td class="num nowrap">' + (rolled ? '–' : esc(O.fmtValue(o, o.target))) + '</td><td style="min-inline-size:140px">' + U.progress(o.progress, o.status, o.code) + '</td><td>' + U.statusBadge(o.status) + '</td>' +
+            '<td class="nowrap small">' + O.fmtRelative(o.lastCheckInOn) + '</td><td class="nowrap small">' + O.fmtDate(o.dueDate) + '</td></tr>';
+        }).join('') + '</tbody></table>' : U.empty('No items match.');
+    }
+    ['o-dept', 'o-level', 'o-status'].forEach(function (x) { $(x).addEventListener('change', renderOps); });
+    $('ops-export').addEventListener('click', function () {
+      var rows = opsRows();
+      O.downloadCsv('okr-operational-report-' + O.prefs.period + '.csv', O.toCsv(rows, [
+        { label: 'Code', value: function (o) { return o.code; } },
+        { label: 'Level', value: function (o) { return O.LEVEL_LABELS[o.level]; } },
+        { label: 'Title', value: function (o) { return o.title; } },
+        { label: 'Department', value: function (o) { return (O.dept(o.departmentId) || {}).name || ''; } },
+        { label: 'Owner', value: function (o) { return (O.user(o.ownerId) || {}).displayName || ''; } },
+        { label: 'Current', value: function (o) { return o.measurementType === 'RolledUp' ? '' : o.current; } },
+        { label: 'Target', value: function (o) { return o.measurementType === 'RolledUp' ? '' : o.target; } },
+        { label: 'Unit', value: function (o) { return o.measurementType === 'RolledUp' ? '' : o.unit; } },
+        { label: 'Progress %', value: function (o) { return Math.round(o.progress); } },
+        { label: 'Status', value: function (o) { return O.STATUS[o.status].label; } },
+        { label: 'Last check-in', value: function (o) { return o.lastCheckInOn ? o.lastCheckInOn.slice(0, 10) : ''; } },
+        { label: 'Due', value: function (o) { return o.dueDate; } },
+        { label: 'Flags', value: function (o) { return O.flags(o).join('; '); } },
+      ]));
+      O.logExport('Operational report');
+      U.toast('Exported ' + rows.length + ' rows to CSV', 'success');
+    });
+    $('print').addEventListener('click', function () { window.print(); });
+    renderOps();
+  })();
+  </script>
+</body>
+</html>

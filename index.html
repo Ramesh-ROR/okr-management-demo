@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Home · OKR Management System</title>
+  <link rel="icon" href="assets/img/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="assets/css/styles.css">
+</head>
+<body>
+  <div id="app" class="app"><noscript><p>This demo needs JavaScript. Please enable it and reload the page.</p></noscript></div>
+  <script src="assets/js/data.js"></script>
+  <script src="assets/js/core.js"></script>
+  <script src="assets/js/ui.js"></script>
+  <script>
+  (function () {
+    'use strict';
+    var O = window.OKR, U = O.ui, esc = O.esc;
+    var main = U.shell('home', 'Home');
+    if (!main) return;
+
+    var me = O.currentUser();
+    var all = O.cycleOkrs();
+    var of = function (level) { return all.filter(function (o) { return o.level === level; }); };
+    var goals = of('Goal'), objectives = of('Objective'), krs = of('KeyResult');
+    var krCounts = O.countByStatus(krs);
+    var attention = all.filter(function (o) { return O.isOverdue(o) || O.isStale(o) || O.isDueSoon(o); })
+      .sort(function (a, b) { return (O.isOverdue(b) - O.isOverdue(a)) || (O.isStale(b) - O.isStale(a)) || (a.dueDate < b.dueDate ? -1 : 1); });
+    var overdue = attention.filter(O.isOverdue).length;
+    var stale = attention.filter(O.isStale).length;
+    var pending = O.pendingForMe();
+    var deptScoped = (me.role === 'DepartmentCoordinator' || me.role === 'OkrChampion') && me.departmentId;
+    var mine = all.filter(function (o) { return o.ownerId === me.id; });
+    var myScope = deptScoped ? all.filter(function (o) { return o.departmentId === me.departmentId && o.level !== 'Goal'; }) : mine;
+    var hour = 13; // demo clock: 09:00 UTC = 13:00 Dubai
+    var greet = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+
+    var actions = '';
+    if (O.can.create()) actions += '<a class="btn btn-primary" href="okr-edit.html">' + U.icon('plus') + '<span>New OKR</span></a>';
+    if (O.can.nav('checkin')) actions += '<a class="btn" href="checkin.html">' + U.icon('checkin') + '<span>Check in</span></a>';
+    if (O.can.nav('reports')) actions += '<a class="btn" href="reports.html">' + U.icon('reports') + '<span>Reports</span></a>';
+
+    var html = U.pageHeader({
+      title: greet + ', ' + me.displayName.split(' ')[0],
+      subtitle: esc(O.ROLE_LABELS[me.role]) + ' · ' + esc(O.periodLabel()) + ' · data as of ' + O.fmtDate(O.asOf.toISOString()),
+      actions: actions,
+    });
+
+    // KPI row
+    var onOrDone = (krCounts.OnTrack || 0) + (krCounts.Completed || 0);
+    html += '<div class="grid grid-kpi" style="margin-block-end:20px">' +
+      U.kpi('Objectives in cycle', objectives.length, goals.length + ' goals · ' + krs.length + ' key results') +
+      U.kpi('Average goal progress', O.pct(O.avg(goals, function (g) { return g.progress; })), 'Weighted roll-up of key results', 'info') +
+      U.kpi('Key results on track', onOrDone + '<span class="muted" style="font-size:18px"> / ' + krs.length + '</span>', (krCounts.AtRisk || 0) + ' at risk · ' + (krCounts.OffTrack || 0) + ' off track', 'warn') +
+      U.kpi('Needs attention', attention.length, overdue + ' overdue · ' + stale + ' without a recent check-in', 'bad') +
+      (O.can.nav('approvals')
+        ? U.kpi('Waiting for my approval', pending.length, pending.length ? '<a href="approvals.html">Review now</a>' : 'Nothing waiting')
+        : U.kpi('Unread notifications', O.unreadCount(), '<a href="notifications.html">Open notifications</a>')) +
+      '</div>';
+
+    // Goals at a glance
+    html += '<h2 class="section-title">Goals at a glance</h2><div class="grid grid-3" style="margin-block-end:20px">' + goals.map(function (g) {
+      var objs = O.children(g.id);
+      var risky = O.descendants(g.id).filter(function (d) { return d.level === 'KeyResult' && (d.status === 'AtRisk' || d.status === 'OffTrack'); }).length;
+      return '<article class="card goal-card"><h3>' + U.okrLink(g) + '</h3>' + U.progress(g.progress, g.status, g.code) +
+        '<div class="goal-meta">' + U.statusBadge(g.status) + U.person(g.ownerId) + '</div>' +
+        '<div class="small muted">' + objs.length + ' objectives · ' + risky + ' key results at risk or off track</div></article>';
+    }).join('') + '</div>';
+
+    // Charts
+    var depts = O.progressByDepartment(all);
+    html += '<div class="grid grid-2" style="margin-block-end:20px">' +
+      U.chartCard({ id: 'kr-status', title: 'Key results by status', desc: krs.length + ' key results in ' + O.periodLabel(), chart: U.statusDonut(krCounts, 'key results'), table: U.statusTable(krCounts) }) +
+      U.chartCard({
+        id: 'dept-progress', title: 'Progress by department', desc: 'Average progress of each department’s key results',
+        chart: U.hbars(depts.map(function (d) { return { label: d.label, value: d.value, sub: d.count + ' key results', href: 'explorer.html?dept=' + d.id, tip: d.label + ': ' + Math.round(d.value) + '% average across ' + d.count + ' key results' }; })),
+        table: U.simpleTable(['Department', 'Key results', 'Average progress'], depts.map(function (d) { return [esc(d.label), d.count, Math.round(d.value) + '%']; }), 'Progress by department'),
+      }) + '</div>';
+
+    // Attention + my items
+    var itemRow = function (o, extra) {
+      return '<li><div class="list-main"><div>' + U.levelChip(o.level) + ' ' + U.okrLink(o) + '</div>' +
+        '<div class="list-meta row">' + U.statusBadge(o.status) + ' ' + O.pct(o.progress) + ' · due ' + O.fmtDate(o.dueDate) + ' · last check-in ' + O.fmtRelative(o.lastCheckInOn) + ' ' + U.flagChips(o) + '</div></div>' + (extra || '') + '</li>';
+    };
+    var checkBtn = function (o) {
+      return O.can.checkIn(o) && O.can.nav('checkin') ? '<a class="btn btn-sm" href="checkin.html?id=' + encodeURIComponent(o.id) + '">Check in</a>' : '';
+    };
+    html += '<div class="grid grid-2" style="margin-block-end:20px">' +
+      '<section class="card" aria-labelledby="att-h"><div class="card-head"><div><h2 class="card-title" id="att-h">Needs attention</h2><p class="card-desc">Overdue, no check-in for ' + O.db.config.reminders.staleAfterDays + '+ days, or due within ' + O.db.config.reminders.dueSoonDays + ' days</p></div>' +
+      '<a class="btn btn-subtle btn-sm" href="explorer.html?flag=attention">View all</a></div>' +
+      (attention.length ? '<ul class="list">' + attention.slice(0, 7).map(function (o) { return itemRow(o, checkBtn(o)); }).join('') + '</ul>' : U.empty('Nothing needs attention.')) + '</section>' +
+      '<section class="card" aria-labelledby="mine-h"><div class="card-head"><div><h2 class="card-title" id="mine-h">' + (deptScoped ? 'My department: ' + esc(O.dept(me.departmentId).name) : 'Items I own') + '</h2>' +
+      '<p class="card-desc">' + myScope.length + ' items in ' + esc(O.periodLabel()) + '</p></div>' +
+      (deptScoped ? '<a class="btn btn-subtle btn-sm" href="explorer.html?dept=' + me.departmentId + '">Open in Explorer</a>' : '') + '</div>' +
+      (myScope.length ? '<ul class="list">' + myScope.slice().sort(function (a, b) { return a.progress - b.progress; }).slice(0, 7).map(function (o) { return itemRow(o, checkBtn(o)); }).join('') + '</ul>'
+        : U.empty('You do not own any items in this period.')) + '</section></div>';
+
+    // Recent activity
+    var recent = O.db.audit.slice().sort(function (a, b) { return a.timestamp < b.timestamp ? 1 : -1; }).slice(0, 6);
+    html += '<section class="card" aria-labelledby="act-h"><h2 class="card-title" id="act-h" style="margin-block-end:12px">Recent activity</h2><ul class="timeline">' + recent.map(function (e) {
+      var u = O.user(e.actorId);
+      return '<li><div><strong>' + esc(u ? u.displayName : 'System') + '</strong> · ' + esc(e.details) + '</div><div class="small muted">' + esc(e.entityName) + ' · ' + O.fmtDateTime(e.timestamp) + '</div></li>';
+    }).join('') + '</ul></section>';
+
+    main.innerHTML = html;
+  })();
+  </script>
+</body>
+</html>

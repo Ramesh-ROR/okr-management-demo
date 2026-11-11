@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Notifications · OKR Management System</title>
+  <link rel="icon" href="assets/img/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="assets/css/styles.css">
+</head>
+<body>
+  <div id="app" class="app"><noscript><p>This demo needs JavaScript. Please enable it and reload the page.</p></noscript></div>
+  <script src="assets/js/data.js"></script>
+  <script src="assets/js/core.js"></script>
+  <script src="assets/js/ui.js"></script>
+  <script>
+  (function () {
+    'use strict';
+    var O = window.OKR, U = O.ui, esc = O.esc;
+    var main = U.shell('notifications', 'Notifications');
+    if (!main) return;
+    var me = O.currentUser();
+    var TYPE_LABELS = { Approval: 'Approval', Decision: 'Decision', DueSoon: 'Due soon', Overdue: 'Overdue', Escalation: 'Escalation', Reminder: 'Reminder', Comment: 'Comment', Assignment: 'Assignment', CheckIn: 'Check-in' };
+    var TYPE_CLASS = { Overdue: 'flag-overdue', Escalation: 'flag-overdue', DueSoon: 'flag-due', Reminder: 'flag-stale', Approval: 'flag-appr', Decision: 'dec-Approved' };
+    var state = { show: O.param('show') === 'unread' ? 'unread' : 'all', type: '' };
+
+    function render() {
+      var list = O.myNotifications();
+      var types = Object.keys(TYPE_LABELS).filter(function (t) { return list.some(function (n) { return n.type === t; }); });
+      var rows = list.filter(function (n) { return (state.show === 'all' || !n.read) && (!state.type || n.type === state.type); });
+      var unread = list.filter(function (n) { return !n.read; }).length;
+      main.innerHTML = U.pageHeader({
+        title: 'Notifications',
+        subtitle: 'For ' + esc(me.displayName) + ' · ' + unread + ' unread',
+        actions: '<button type="button" class="btn" id="all-read"' + (unread ? '' : ' disabled') + '>' + U.icon('check') + '<span>Mark all as read</span></button>',
+      }) +
+      '<form class="filters" aria-label="Filter notifications"><fieldset class="field" style="padding:6px 10px"><legend>Show</legend><div class="radio-row">' +
+        '<label><input type="radio" name="show" value="all"' + (state.show === 'all' ? ' checked' : '') + '> All (' + list.length + ')</label>' +
+        '<label><input type="radio" name="show" value="unread"' + (state.show === 'unread' ? ' checked' : '') + '> Unread (' + unread + ')</label></div></fieldset>' +
+        '<label class="field"><span class="field-label">Type</span><select id="type">' + U.selectOptions(types.map(function (t) { return { value: t, label: TYPE_LABELS[t] }; }), state.type, 'All types') + '</select></label></form>' +
+      (rows.length ? '<div class="card"><ul class="list">' + rows.map(function (n) {
+        var o = O.okr(n.okrId);
+        return '<li class="notif' + (n.read ? '' : ' unread') + '"><span class="chip type-chip ' + (TYPE_CLASS[n.type] || '') + '">' + esc(TYPE_LABELS[n.type] || n.type) + '</span>' +
+          '<div class="list-main"><div class="list-title">' + (n.read ? '' : '<span class="sr-only">Unread: </span>') + esc(n.title) + '</div><div>' + esc(n.message) + '</div>' +
+          '<div class="list-meta">' + O.fmtDateTime(n.createdOn) + ' · ' + O.fmtRelative(n.createdOn) + (o ? ' · <a href="okr.html?id=' + encodeURIComponent(o.id) + '" data-open="' + esc(n.id) + '">Open ' + esc(o.code) + '</a>' : '') + '</div></div>' +
+          '<button type="button" class="btn btn-sm btn-subtle" data-toggle-read="' + esc(n.id) + '">' + (n.read ? 'Mark unread' : 'Mark read') + '</button></li>';
+      }).join('') + '</ul></div>' : U.empty(state.show === 'unread' ? 'You are all caught up.' : 'No notifications.'));
+
+      document.querySelectorAll('input[name="show"]').forEach(function (r) { r.addEventListener('change', function () { state.show = r.value; render(); }); });
+      document.getElementById('type').addEventListener('change', function (e) { state.type = e.target.value; render(); });
+      document.getElementById('all-read').addEventListener('click', function () { O.markAllRead(); U.toast('All notifications marked as read', 'success'); render(); });
+      U.refreshNav();
+    }
+
+    main.addEventListener('click', function (e) {
+      var t = e.target.closest('[data-toggle-read]');
+      if (t) {
+        var id = t.getAttribute('data-toggle-read');
+        var n = O.db.notifications.filter(function (x) { return x.id === id; })[0];
+        O.markRead(id, !n.read);
+        render();
+        var again = document.querySelector('[data-toggle-read="' + CSS.escape(id) + '"]');
+        if (again) again.focus();
+      }
+      var op = e.target.closest('[data-open]');
+      if (op) O.markRead(op.getAttribute('data-open'), true);
+    });
+    render();
+  })();
+  </script>
+</body>
+</html>

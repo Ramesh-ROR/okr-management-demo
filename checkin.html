@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Check-in · OKR Management System</title>
+  <link rel="icon" href="assets/img/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="assets/css/styles.css">
+</head>
+<body>
+  <div id="app" class="app"><noscript><p>This demo needs JavaScript. Please enable it and reload the page.</p></noscript></div>
+  <script src="assets/js/data.js"></script>
+  <script src="assets/js/core.js"></script>
+  <script src="assets/js/ui.js"></script>
+  <script>
+  (function () {
+    'use strict';
+    var O = window.OKR, U = O.ui, esc = O.esc;
+    var id = O.param('id');
+    var o = id ? O.okr(id) : null;
+    var main = U.shell('checkin', o ? 'Check-in ' + o.code : 'Check-in');
+    if (!main) return;
+    var me = O.currentUser();
+    var $ = function (x) { return document.getElementById(x); };
+
+    if (id && !o) { main.innerHTML = U.pageHeader({ title: 'Item not found' }) + U.empty('<a href="checkin.html">Back to check-ins</a>'); return; }
+    if (o) { form(); return; }
+    list();
+
+    // ------------------------------------------------------------ list of items to update
+    function list() {
+      var scope = O.param('scope') === 'all' ? 'all' : 'mine';
+      var showDone = O.param('done') === '1';
+      var mineOrDept = O.cycleOkrs().filter(O.can.checkIn);
+      var rows = mineOrDept.filter(function (x) { return (scope === 'all' || x.ownerId === me.id) && (showDone || x.status !== 'Completed'); });
+      var rank = function (x) { return O.isOverdue(x) ? 0 : O.isStale(x) ? 1 : O.isDueSoon(x) ? 2 : 3; };
+      rows.sort(function (a, b) { return rank(a) - rank(b) || a.progress - b.progress; });
+      var cadenceDays = O.db.config.reminders.checkInCadence === 'Monthly' ? 30 : O.db.config.reminders.checkInCadence === 'Fortnightly' ? 14 : 7;
+      var leaves = mineOrDept.filter(function (x) { return x.measurementType !== 'RolledUp' && x.status !== 'Completed'; });
+      var due = leaves.filter(function (x) { var d = O.daysSince(x.lastCheckInOn); return d === null || d >= cadenceDays; }).length;
+      var thisWeek = O.db.checkins.filter(function (c) { return O.daysSince(c.date) < 7 && mineOrDept.some(function (x) { return x.id === c.okrId; }); }).length;
+
+      main.innerHTML = U.pageHeader({
+        title: 'Check-in',
+        subtitle: 'Update progress, status and blockers. Cadence: ' + esc(O.db.config.reminders.checkInCadence.toLowerCase()) + ', reminders on ' + esc(O.db.config.reminders.reminderDay) + '.',
+      }) +
+      '<div class="grid grid-kpi" style="margin-block-end:20px">' +
+        U.kpi('Items you can update', mineOrDept.length, me.role === 'OkrChampion' || me.role === 'DepartmentCoordinator' ? 'Owned by you or in ' + esc(O.dept(me.departmentId).name) : 'Owned by you') +
+        U.kpi('Due for a check-in', due, 'No update in the last ' + cadenceDays + ' days', 'warn') +
+        U.kpi('Overdue items', mineOrDept.filter(O.isOverdue).length, 'Past due date and not complete', 'bad') +
+        U.kpi('Check-ins this week', thisWeek, 'Across the items above', 'info') + '</div>' +
+      '<form class="filters" id="scope-form" aria-label="Filter the list"><fieldset class="field" style="padding:6px 10px"><legend>Show</legend><div class="radio-row">' +
+        '<label><input type="radio" name="scope" value="mine"' + (scope === 'mine' ? ' checked' : '') + '> Items I own</label>' +
+        '<label><input type="radio" name="scope" value="all"' + (scope === 'all' ? ' checked' : '') + '> Everything I can update</label></div></fieldset>' +
+        '<label class="check" style="padding-block-end:8px"><input type="checkbox" id="done"' + (showDone ? ' checked' : '') + '> Include completed</label></form>' +
+      (rows.length
+        ? '<div class="card" style="padding:0"><div class="table-wrap"><table class="data"><caption class="sr-only">Items to check in on, most urgent first</caption><thead><tr><th scope="col">Item</th><th scope="col">Owner</th><th scope="col">Progress</th><th scope="col">Status</th><th scope="col">Last check-in</th><th scope="col">Due</th><th scope="col"><span class="sr-only">Action</span></th></tr></thead><tbody>' +
+          rows.map(function (x) {
+            return '<tr><td class="cell-title">' + U.levelChip(x.level) + ' ' + U.okrLink(x) + '<div>' + U.flagChips(x) + '</div></td><td class="nowrap small">' + esc((O.user(x.ownerId) || {}).displayName || '–') + '</td>' +
+              '<td style="min-inline-size:150px">' + U.progress(x.progress, x.status, x.code) + '</td><td>' + U.statusBadge(x.status) + '</td><td class="nowrap small">' + O.fmtRelative(x.lastCheckInOn) + '</td><td class="nowrap small">' + O.fmtDate(x.dueDate) + '</td>' +
+              '<td><a class="btn btn-sm btn-primary" href="checkin.html?id=' + encodeURIComponent(x.id) + '" aria-label="Check in on ' + esc(x.code) + '">Check in</a></td></tr>';
+          }).join('') + '</tbody></table></div></div>'
+        : U.empty(scope === 'mine' ? 'You do not own any open items. Choose “Everything I can update” to see your department’s items.' : 'Nothing to update.'));
+
+      var go = function () {
+        var s = document.querySelector('input[name="scope"]:checked').value;
+        window.location.href = 'checkin.html?scope=' + s + ($('done').checked ? '&done=1' : '');
+      };
+      document.querySelectorAll('input[name="scope"]').forEach(function (r) { r.addEventListener('change', go); });
+      $('done').addEventListener('change', go);
+    }
+
+    // ------------------------------------------------------------ the check-in form with live roll-up preview
+    function form() {
+      if (!O.can.checkIn(o)) {
+        main.innerHTML = U.pageHeader({ before: U.breadcrumb(o), title: 'Check-in: ' + o.title }) +
+          '<div class="msg msg-warning">Only the owner, or the coordinator or OKR champion of ' + esc((O.dept(o.departmentId) || {}).name || 'the department') + ', can check in on ' + esc(o.code) + '. <a href="okr.html?id=' + encodeURIComponent(o.id) + '">Open the item</a></div>';
+        return;
+      }
+      var rolled = o.measurementType === 'RolledUp';
+      var unitLabel = o.measurementType === 'Currency' ? 'AED' : (o.unit || 'value');
+      main.innerHTML = U.pageHeader({
+        before: U.breadcrumb(o, 'Check-in', 'checkin.html'),
+        title: 'Check-in: ' + o.title,
+        subtitle: U.levelChip(o.level) + ' ' + U.statusBadge(o.status) + ' Last check-in ' + O.fmtRelative(o.lastCheckInOn) + ' · current ' + esc(O.fmtValue(o, o.current)) + ' · target ' + esc(O.fmtValue(o, o.target)),
+      }) +
+      '<div id="done-msg"></div>' +
+      '<div class="grid grid-2" style="align-items:start"><form id="ci-form" class="card stack" novalidate aria-label="Check-in">' +
+        '<h2 class="section-title" style="margin:0">Update</h2>' +
+        (rolled
+          ? '<div class="msg msg-info">This item rolls up from its children (' + O.pct(o.progress) + '). Add a status and narrative for context.</div>'
+          : '<div class="field"><label class="field-label" for="value">Current value (' + esc(unitLabel) + ')<span class="req" aria-hidden="true">*</span></label>' +
+            '<input type="number" step="any" id="value" value="' + esc(o.current) + '" aria-required="true" aria-describedby="value-hint">' +
+            '<span class="hint" id="value-hint"></span><span class="error" id="value-err" hidden>Enter a number.</span></div>') +
+        '<fieldset><legend>Status</legend><div class="radio-row" id="status-row"></div><p class="hint" id="status-hint" style="margin:6px 0 0"></p></fieldset>' +
+        '<div class="field"><label class="field-label" for="confidence">Confidence of reaching the target: <span id="conf-val">7</span>/10</label><input type="range" id="confidence" min="1" max="10" value="7" aria-valuetext="7 out of 10"></div>' +
+        '<div class="field"><label class="field-label" for="narrative">Narrative<span class="req" aria-hidden="true">*</span></label>' +
+        '<textarea id="narrative" rows="4" aria-required="true" aria-describedby="narr-hint" placeholder="What changed, what is blocking, what help is needed?"></textarea>' +
+        '<span class="hint" id="narr-hint">At least one sentence (10+ characters).</span><span class="error" id="narr-err" hidden>Write at least a sentence (10+ characters) about progress and blockers.</span></div>' +
+        '<div class="form-footer" id="ci-actions"><a class="btn btn-subtle" href="checkin.html">Cancel</a><button type="submit" class="btn btn-primary">' + U.icon('check') + '<span>Save check-in</span></button></div></form>' +
+      '<section class="card" aria-labelledby="ru-h"><h2 class="card-title" id="ru-h">Roll-up preview</h2><p class="small muted">Parent progress = Σ(child progress × weight) ÷ Σ(weights), recalculated up to the goal.</p>' +
+        '<div id="preview" aria-live="polite"></div></section></div>';
+
+      var chosen = '';
+      var conf = $('confidence');
+      conf.addEventListener('input', function () { $('conf-val').textContent = conf.value; conf.setAttribute('aria-valuetext', conf.value + ' out of 10'); });
+
+      function current() {
+        if (rolled) return { ok: true, value: o.current, progress: o.progress };
+        var raw = $('value').value;
+        var n = Number(raw);
+        var ok = raw.trim() !== '' && isFinite(n);
+        var prog = ok ? O.measuredProgress(Object.assign({}, o, { current: n })) : o.progress;
+        return { ok: ok, value: n, progress: prog };
+      }
+      function update() {
+        var c = current();
+        var suggested = O.suggestStatus(c.progress, o);
+        var eff = chosen || suggested;
+        if (!rolled) $('value-hint').textContent = 'Baseline ' + O.fmtValue(o, o.baseline) + ' → target ' + O.fmtValue(o, o.target) + '. New progress: ' + Math.round(c.progress) + '%.';
+        $('status-row').innerHTML = ['OnTrack', 'AtRisk', 'OffTrack', 'Completed'].map(function (s) {
+          return '<label><input type="radio" name="status" value="' + s + '"' + (s === eff ? ' checked' : '') + '> ' + esc(O.STATUS[s].label) + (s === suggested ? ' <span class="muted">(suggested)</span>' : '') + '</label>';
+        }).join('');
+        $('status-hint').textContent = 'Suggested from progress and time elapsed: ' + O.STATUS[suggested].label + '. Expected progress by today is ' + Math.round(O.expectedProgress(o)) + '%.';
+        document.querySelectorAll('input[name="status"]').forEach(function (r) { r.addEventListener('change', function () { chosen = r.value; update(); var again = document.querySelector('input[name="status"][value="' + chosen + '"]'); if (again) again.focus(); }); });
+        renderPreview(c.ok ? O.previewRollup(o.id, c.value, eff === suggested && !chosen ? null : eff) : [], 'Roll-up preview');
+      }
+      function renderPreview(rows, heading) {
+        $('ru-h').textContent = heading;
+        $('preview').innerHTML = rows.length ? '<div class="table-wrap"><table class="data"><thead><tr><th scope="col">Item</th><th scope="col" class="num">Before</th><th scope="col">After</th><th scope="col">Status</th></tr></thead><tbody>' +
+          rows.map(function (r) {
+            var diff = Math.round(r.after) - Math.round(r.before);
+            return '<tr><td><a href="okr.html?id=' + encodeURIComponent(r.id) + '" class="okr-link"><span class="code">' + esc(r.code) + '</span></a> <span class="small muted">' + esc(r.title.length > 46 ? r.title.slice(0, 46) + '…' : r.title) + '</span></td>' +
+              '<td class="num">' + Math.round(r.before) + '%</td><td style="min-inline-size:150px">' + U.progress(r.after, r.statusAfter, r.code) + (diff ? '<span class="small ' + (diff > 0 ? '' : 'muted') + '">' + (diff > 0 ? '+' : '') + diff + ' points</span>' : '') + '</td><td>' + U.statusBadge(r.statusAfter) + '</td></tr>';
+          }).join('') + '</tbody></table></div>' : U.empty('Enter a valid value to see the effect.');
+      }
+      if (!rolled) $('value').addEventListener('input', update);
+      update();
+
+      $('ci-form').addEventListener('submit', function (e) {
+        e.preventDefault();
+        var c = current();
+        var narrative = $('narrative').value.trim();
+        var bad = null;
+        if (!rolled) { $('value-err').hidden = c.ok; if (c.ok) $('value').removeAttribute('aria-invalid'); else { $('value').setAttribute('aria-invalid', 'true'); $('value').setAttribute('aria-describedby', 'value-err'); bad = bad || $('value'); } }
+        var nOk = narrative.length >= 10;
+        $('narr-err').hidden = nOk;
+        if (nOk) { $('narrative').removeAttribute('aria-invalid'); $('narrative').setAttribute('aria-describedby', 'narr-hint'); }
+        else { $('narrative').setAttribute('aria-invalid', 'true'); $('narrative').setAttribute('aria-describedby', 'narr-err'); bad = bad || $('narrative'); }
+        if (bad) { bad.focus(); return; }
+        var statusEl = document.querySelector('input[name="status"]:checked');
+        var suggested = O.suggestStatus(c.progress, o);
+        var status = statusEl ? statusEl.value : suggested;
+        var preview = O.previewRollup(o.id, c.value, status);
+        O.addCheckIn({ okrId: o.id, value: c.value, status: status === suggested && !chosen ? null : status, narrative: narrative, confidence: Number(conf.value) });
+        renderPreview(preview, 'Recalculated roll-up');
+        $('ci-form').querySelectorAll('input, textarea').forEach(function (el) { el.disabled = true; });
+        $('ci-actions').innerHTML = '<a class="btn" href="checkin.html">Back to check-in list</a><a class="btn btn-primary" href="okr.html?id=' + encodeURIComponent(o.id) + '&tab=checkins">View history</a>';
+        $('done-msg').innerHTML = '<div class="msg msg-success" role="status" style="margin-block-end:16px"><strong>Check-in saved.</strong> Progress and status were recalculated up the hierarchy (see the table on the right).</div>';
+        U.toast('Check-in saved for ' + o.code, 'success', 'Parent roll-ups have been recalculated.');
+        $('ci-actions').querySelector('a').focus();
+      });
+    }
+  })();
+  </script>
+</body>
+</html>
