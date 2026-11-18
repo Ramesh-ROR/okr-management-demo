@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>1:1 meetings · OKR Management System</title>
+  <link rel="icon" href="assets/img/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="assets/css/styles.css">
+</head>
+<body>
+  <div id="app" class="app"><noscript><p>This demo needs JavaScript. Please enable it and reload the page.</p></noscript></div>
+  <script src="assets/js/data.js"></script>
+  <script src="assets/js/core.js"></script>
+  <script src="assets/js/ui.js"></script>
+  <script>
+  (function () {
+    'use strict';
+    var O = window.OKR, U = O.ui, esc = O.esc;
+    var main = U.shell('meetings', '1:1 meetings');
+    if (!main) return;
+    var me = O.currentUser();
+    var $ = function (x) { return document.getElementById(x); };
+    var selected = O.param('id');
+
+    function other(m) { return O.user(m.managerId === me.id ? m.employeeId : m.managerId); }
+    function isParticipant(m) { return m.managerId === me.id || m.employeeId === me.id; }
+
+    function render() {
+      var list = O.myMeetings();
+      var upcoming = list.filter(function (m) { return m.status === 'Scheduled'; });
+      var past = list.filter(function (m) { return m.status !== 'Scheduled'; }).reverse();
+      if (!selected || !O.meeting(selected) || list.indexOf(O.meeting(selected)) < 0) selected = (upcoming[0] || past[0] || {}).id;
+      var item = function (m) {
+        var o = other(m) || O.user(m.employeeId);
+        return '<li><a href="?id=' + m.id + '" data-pick="' + m.id + '" class="meeting-link' + (m.id === selected ? ' active' : '') + '"' + (m.id === selected ? ' aria-current="true"' : '') + '>' + U.avatar(o.id, 32) +
+          '<span><strong>' + (me.role === 'PlatformAdmin' ? esc(O.user(m.managerId).displayName + ' / ' + O.user(m.employeeId).displayName) : '1:1 with ' + esc(o.displayName)) + '</strong><span class="small muted">' + O.fmtWeekday(m.date) + ' · ' + O.fmtTime(m.date) + ' · ' + m.goalIds.length + ' goals</span></span></a></li>';
+      };
+      var canSchedule = me.role !== 'PlatformAdmin';
+      main.innerHTML = U.pageHeader({
+        title: '1:1 meetings',
+        subtitle: 'Recurring conversations between managers and their people, with goals on the agenda. Notes and action items are shared by both participants.',
+        actions: canSchedule ? '<button type="button" class="btn btn-primary" id="new">' + U.icon('plus') + '<span>Schedule a 1:1</span></button>' : '',
+      }) +
+      '<div class="meetings-layout"><nav class="card meeting-nav" aria-label="Meetings"><h2 class="section-title">Upcoming</h2>' + (upcoming.length ? '<ul class="plain">' + upcoming.map(item).join('') + '</ul>' : '<p class="muted small">None scheduled.</p>') +
+      '<h2 class="section-title" style="margin-block-start:16px">Past</h2>' + (past.length ? '<ul class="plain">' + past.map(item).join('') + '</ul>' : '<p class="muted small">No past meetings.</p>') + '</nav>' +
+      '<div id="detail">' + (selected ? detail(O.meeting(selected)) : U.empty('No 1:1 meetings yet.' + (canSchedule ? ' Schedule one to start.' : ''))) + '</div></div>';
+      bind();
+    }
+
+    function detail(m) {
+      var mgr = O.user(m.managerId), emp = O.user(m.employeeId);
+      var edit = isParticipant(m) && m.status === 'Scheduled';
+      var goals = m.goalIds.map(O.okr).filter(Boolean);
+      var addable = O.db.okrs.filter(function (o) { return o.cycleId === O.activeCycle().id && O.owns(o, emp.id) && m.goalIds.indexOf(o.id) < 0 && !o.closedState; });
+      return '<section class="card stack" aria-labelledby="m-title">' +
+        '<div class="row" style="justify-content:space-between;align-items:flex-start"><div><h2 id="m-title" class="card-title" style="font-size:20px">1:1 ' + esc(mgr.displayName) + ' &amp; ' + esc(emp.displayName) + '</h2>' +
+        '<p class="muted" style="margin:4px 0 0">' + O.fmtWeekday(m.date) + ' ' + O.fmtDate(m.date).slice(-4) + ' · ' + O.fmtTime(m.date) + ' (' + m.durationMin + ' min) · ' + esc(m.recurrence) + ' · <span class="chip ' + (m.status === 'Scheduled' ? 'flag-due' : 'dec-Approved') + '">' + esc(m.status) + '</span></p></div>' +
+        '<div class="row">' + U.person(mgr.id, true) + U.person(emp.id, true) + '</div></div>' +
+        (edit ? '<div class="row"><button type="button" class="btn btn-sm btn-primary" id="complete">' + U.icon('check') + '<span>Complete and schedule next</span></button></div>' : '') +
+
+        '<div class="grid grid-2" style="align-items:start"><section aria-labelledby="g-h"><h3 class="section-title" id="g-h">Goals on the agenda</h3>' +
+        (goals.length ? '<ul class="list">' + goals.map(function (o) {
+          return '<li><div class="list-main">' + U.okrLink(o) + ' ' + U.flagChips(o) + '<div class="list-meta">' + esc(o.measurementType === 'Binary' || o.measurementType === 'Tasks' ? O.fmtValue(o, o.current) : O.fmtValue(o, o.current) + ' of ' + O.fmtTarget(o)) + ' · last update ' + O.fmtRelative(o.lastCheckInOn) + '</div>' + U.progress(o.progress, o.status, o.code) + '</div>' + U.statusBadge(o.status) +
+            (O.can.checkIn(o) && o.measurementType !== 'Tasks' ? '<a class="btn btn-sm" href="checkin.html?id=' + encodeURIComponent(o.id) + '">Check in</a>' : '') +
+            (edit ? '<button type="button" class="btn btn-sm btn-subtle" data-remove-goal="' + o.id + '" aria-label="Remove ' + esc(o.code) + ' from the agenda">' + U.icon('close') + '</button>' : '') + '</li>';
+        }).join('') + '</ul>' : '<p class="muted">No goals on the agenda.</p>') +
+        (edit && addable.length ? '<form class="row" id="add-goal" novalidate><label class="sr-only" for="goal-pick">Add a goal</label><select id="goal-pick" style="flex:1">' + U.selectOptions(addable.map(function (o) { return { value: o.id, label: o.code + ' – ' + o.title.slice(0, 60) }; }), '', 'Add one of ' + emp.displayName.split(' ')[0] + '’s goals…') + '</select><button type="submit" class="btn btn-sm">Add</button></form>' : '') + '</section>' +
+
+        '<section aria-labelledby="a-h"><h3 class="section-title" id="a-h">Talking points</h3><ul class="task-list">' + m.agenda.map(function (a) {
+          return '<li><label class="check"><input type="checkbox" data-agenda="' + a.id + '"' + (a.done ? ' checked' : '') + (isParticipant(m) ? '' : ' disabled') + '> <span class="' + (a.done ? 'done' : '') + '">' + esc(a.text) + '</span></label></li>';
+        }).join('') + '</ul>' + (edit ? '<form class="row" id="add-point" novalidate><label class="sr-only" for="point">New talking point</label><input type="text" id="point" placeholder="Add a talking point" style="flex:1"><button type="submit" class="btn btn-sm">Add</button></form>' : '') + '</section></div>' +
+
+        '<div class="grid grid-2" style="align-items:start"><section aria-labelledby="n-h"><h3 class="section-title" id="n-h">Shared notes</h3>' +
+        (isParticipant(m) ? '<label class="sr-only" for="notes">Shared notes</label><textarea id="notes" rows="5" placeholder="Agreements, context, follow-ups…">' + esc(m.notes) + '</textarea><div style="margin-block-start:8px"><button type="button" class="btn btn-sm" id="save-notes">Save notes</button></div>'
+          : '<p>' + (esc(m.notes) || '<span class="muted">No notes.</span>') + '</p>') + '</section>' +
+        '<section aria-labelledby="ac-h"><h3 class="section-title" id="ac-h">Action items</h3>' + (m.actions.length ? '<ul class="task-list">' + m.actions.map(function (a) {
+          return '<li><label class="check"><input type="checkbox" data-action="' + a.id + '"' + (a.done ? ' checked' : '') + (isParticipant(m) ? '' : ' disabled') + '> <span class="' + (a.done ? 'done' : '') + '">' + esc(a.text) + '</span></label><span class="small muted">' + esc((O.user(a.assigneeId) || {}).displayName || '') + '</span></li>';
+        }).join('') + '</ul>' : '<p class="muted">No action items.</p>') +
+        (isParticipant(m) ? '<form class="row" id="add-action" novalidate><label class="sr-only" for="action-text">New action item</label><input type="text" id="action-text" placeholder="New action item" style="flex:2"><label class="sr-only" for="action-who">Assigned to</label><select id="action-who" style="flex:1">' + U.selectOptions([{ value: emp.id, label: emp.displayName }, { value: mgr.id, label: mgr.displayName }]) + '</select><button type="submit" class="btn btn-sm">Add</button></form>' : '') +
+        '<p class="small muted" style="margin-block-start:8px">Action items sync to Microsoft To Do for the assignee (simulated).</p></section></div></section>';
+    }
+
+    function bind() {
+      document.querySelectorAll('[data-pick]').forEach(function (a) { a.addEventListener('click', function (e) { e.preventDefault(); selected = a.getAttribute('data-pick'); render(); try { history.replaceState(null, '', '?id=' + selected); } catch (x) { /* ignore */ } var h = $('m-title'); if (h) { h.setAttribute('tabindex', '-1'); h.focus(); } }); });
+      if ($('new')) $('new').addEventListener('click', scheduleDialog);
+      var m = selected && O.meeting(selected);
+      if (!m) return;
+      document.querySelectorAll('[data-agenda]').forEach(function (cb) { cb.addEventListener('change', function () { m.agenda.forEach(function (a) { if (a.id === cb.getAttribute('data-agenda')) a.done = cb.checked; }); O.updateMeeting(m.id, { agenda: m.agenda }); render(); }); });
+      document.querySelectorAll('[data-action]').forEach(function (cb) { cb.addEventListener('change', function () { m.actions.forEach(function (a) { if (a.id === cb.getAttribute('data-action')) a.done = cb.checked; }); O.updateMeeting(m.id, { actions: m.actions }, 'Action item updated.'); render(); }); });
+      document.querySelectorAll('[data-remove-goal]').forEach(function (b) { b.addEventListener('click', function () { O.updateMeeting(m.id, { goalIds: m.goalIds.filter(function (g) { return g !== b.getAttribute('data-remove-goal'); }) }, 'Goal removed from the agenda.'); render(); }); });
+      if ($('add-goal')) $('add-goal').addEventListener('submit', function (e) { e.preventDefault(); var g = $('goal-pick').value; if (!g) return; O.updateMeeting(m.id, { goalIds: m.goalIds.concat([g]) }, 'Goal added to the agenda.'); render(); });
+      if ($('add-point')) $('add-point').addEventListener('submit', function (e) { e.preventDefault(); var t = $('point').value.trim(); if (!t) { $('point').focus(); return; } m.agenda.push({ id: 'ag-' + Date.now(), text: t, done: false }); O.updateMeeting(m.id, { agenda: m.agenda }, 'Talking point added.'); render(); $('point').focus(); });
+      if ($('add-action')) $('add-action').addEventListener('submit', function (e) { e.preventDefault(); var t = $('action-text').value.trim(); if (!t) { $('action-text').focus(); return; } m.actions.push({ id: 'ac-' + Date.now(), text: t, assigneeId: $('action-who').value, done: false }); O.updateMeeting(m.id, { actions: m.actions }, 'Action item added.'); U.toast('Action item added', 'success', 'Synced to Microsoft To Do for ' + O.user($('action-who').value).displayName + ' (simulated).'); render(); });
+      if ($('save-notes')) $('save-notes').addEventListener('click', function () { O.updateMeeting(m.id, { notes: $('notes').value }, 'Shared notes updated.'); U.toast('Notes saved', 'success', 'Both participants can see them.'); });
+      if ($('complete')) $('complete').addEventListener('click', function () {
+        var next = new Date(new Date(m.date).getTime() + (m.recurrence === 'Monthly' ? 28 : m.recurrence === 'Weekly' ? 7 : 14) * 86400000).toISOString();
+        O.updateMeeting(m.id, { status: 'Completed' }, 'Meeting completed.');
+        var carried = m.agenda.filter(function (a) { return !a.done; }).map(function (a) { return { id: 'ag-' + Date.now() + Math.random().toString(36).slice(2, 5), text: a.text, done: false }; });
+        var nm = O.createMeeting({ managerId: m.managerId, employeeId: m.employeeId, date: next, durationMin: m.durationMin, recurrence: m.recurrence, goalIds: m.goalIds.slice(), agenda: carried, actions: m.actions.filter(function (a) { return !a.done; }) });
+        selected = nm.id;
+        U.toast('Meeting completed', 'success', 'Next 1:1 scheduled for ' + O.fmtDate(next) + ' with open talking points and actions carried over.');
+        render();
+      });
+    }
+
+    function scheduleDialog() {
+      var reports = O.directReports(me.id);
+      var mgr = O.managerOf(me.id);
+      var people = reports.map(function (u) { return { value: 'r|' + u.id, label: u.displayName + ' (reports to you)' }; });
+      if (mgr) people.push({ value: 'm|' + mgr.id, label: mgr.displayName + ' (your manager)' });
+      if (!people.length) { U.toast('No one to meet', 'error', 'You have no manager or direct reports in the sample data.'); return; }
+      var dt = new Date(O.asOf.getTime() + 3 * 86400000);
+      var local = dt.toISOString().slice(0, 10) + 'T10:00';
+      U.dialog({
+        title: 'Schedule a 1:1', wide: true,
+        body: '<label class="field"><span class="field-label">With</span><select id="s-who">' + U.selectOptions(people) + '</select></label>' +
+          '<div class="form-grid"><label class="field"><span class="field-label">Date and time (Dubai)</span><input type="datetime-local" id="s-when" value="' + local + '"></label>' +
+          '<label class="field"><span class="field-label">Repeats</span><select id="s-rec">' + U.selectOptions(['Every 2 weeks', 'Weekly', 'Monthly', 'Does not repeat']) + '</select></label></div>' +
+          '<fieldset><legend>Suggested goals for the agenda</legend><p class="small muted" style="margin-top:0">At risk, off track, stale, due soon, or individual goals.</p><div id="s-goals" class="stack-sm"></div></fieldset>' +
+          '<label class="field"><span class="field-label">Talking points (one per line)</span><textarea id="s-points" rows="3"></textarea></label>',
+        okLabel: 'Schedule',
+        onOk: function (dlg) {
+          var who = dlg.querySelector('#s-who').value.split('|');
+          var when = dlg.querySelector('#s-when').value;
+          if (!when) { dlg.querySelector('#s-when').focus(); return false; }
+          var iso = new Date(when + ':00+04:00').toISOString();
+          var goalIds = Array.prototype.slice.call(dlg.querySelectorAll('input[name="s-goal"]:checked')).map(function (c) { return c.value; });
+          var agenda = dlg.querySelector('#s-points').value.split(/\r?\n/).map(function (s) { return s.trim(); }).filter(Boolean).map(function (t, i) { return { id: 'ag-' + Date.now() + i, text: t, done: false }; });
+          var m = O.createMeeting({ managerId: who[0] === 'r' ? me.id : who[1], employeeId: who[0] === 'r' ? who[1] : me.id, date: iso, recurrence: dlg.querySelector('#s-rec').value, goalIds: goalIds, agenda: agenda });
+          selected = m.id;
+          U.toast('1:1 scheduled', 'success', 'Invitation sent through Outlook and Teams (simulated).');
+          render();
+        },
+      });
+      var sync = function () {
+        var who = $('s-who').value.split('|');
+        var empId = who[0] === 'r' ? who[1] : me.id;
+        var sugg = O.suggestedGoals(empId);
+        $('s-goals').innerHTML = sugg.length ? sugg.map(function (o) { return '<label class="check"><input type="checkbox" name="s-goal" value="' + o.id + '" checked> ' + esc(o.code + ' – ' + o.title) + ' ' + U.statusBadge(o.status) + '</label>'; }).join('') : '<p class="muted small">No goals need discussion right now.</p>';
+      };
+      $('s-who').addEventListener('change', sync);
+      sync();
+    }
+    render();
+  })();
+  </script>
+</body>
+</html>

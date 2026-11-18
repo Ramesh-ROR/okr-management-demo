@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>People · OKR Management System</title>
+  <link rel="icon" href="assets/img/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="assets/css/styles.css">
+</head>
+<body>
+  <div id="app" class="app"><noscript><p>This demo needs JavaScript. Please enable it and reload the page.</p></noscript></div>
+  <script src="assets/js/data.js"></script>
+  <script src="assets/js/core.js"></script>
+  <script src="assets/js/ui.js"></script>
+  <script>
+  (function () {
+    'use strict';
+    var O = window.OKR, U = O.ui, esc = O.esc;
+    var main = U.shell('people', 'People');
+    if (!main) return;
+    var me = O.currentUser();
+    var $ = function (x) { return document.getElementById(x); };
+    var all = O.cycleOkrs();
+    var selected = O.param('user') || me.id;
+    if (!O.user(selected)) selected = me.id;
+
+    function goalsOf(uid) { return all.filter(function (o) { return O.owns(o, uid); }); }
+    function node(u) {
+      var g = goalsOf(u.id), c = O.countByStatus(g);
+      var dots = ['OnTrack', 'AtRisk', 'OffTrack', 'Completed'].filter(function (s) { return c[s]; }).map(function (s) { return '<span class="mini-status" style="color:' + O.STATUS[s].color + '" title="' + esc(O.STATUS[s].label) + '">' + O.STATUS[s].glyph + ' ' + c[s] + '</span>'; }).join(' ');
+      var kids = O.directReports(u.id);
+      return '<li><a href="?user=' + u.id + '" data-user="' + u.id + '" class="org-node' + (u.id === selected ? ' active' : '') + (u.id === me.id ? ' me' : '') + '"' + (u.id === selected ? ' aria-current="true"' : '') + '>' + U.avatar(u.id, 36) +
+        '<span class="org-text"><strong>' + esc(u.displayName) + (u.id === me.id ? ' <span class="chip">You</span>' : '') + '</strong><span class="small muted">' + esc(u.jobTitle) + '</span>' +
+        '<span class="small">' + g.length + (g.length === 1 ? ' goal' : ' goals') + (g.length ? ' · avg ' + O.pct(O.avg(g, function (o) { return o.progress; })) + ' · ' + dots : '') + '</span></span></a>' +
+        (kids.length ? '<ul>' + kids.map(node).join('') + '</ul>' : '') + '</li>';
+    }
+
+    function profile(uid) {
+      var u = O.user(uid), mgr = O.managerOf(uid), reports = O.directReports(uid);
+      var g = goalsOf(uid), personal = g.filter(function (o) { return o.level === 'Personal'; }), assigned = g.filter(function (o) { return o.level !== 'Personal'; });
+      var hidden = O.db.okrs.filter(function (o) { return o.cycleId === O.currentCycle().id && O.owns(o, uid) && !O.can.view(o); }).length;
+      var shared = O.myMeetings().filter(function (m) { return (m.managerId === uid || m.employeeId === uid) && m.status === 'Scheduled'; })[0];
+      var canMeet = uid !== me.id && (O.isManagerOf(me.id, uid) || (mgr && mgr.id === me.id) || (O.managerOf(me.id) || {}).id === uid);
+      var list = function (items) {
+        return items.length ? '<ul class="list">' + items.map(function (o) { return '<li><div class="list-main">' + U.levelChip(o.level) + ' ' + U.okrLink(o) + ' ' + U.visibilityChip(o) + '<div class="list-meta">' + U.flagChips(o) + ' due ' + O.fmtDate(o.dueDate) + '</div></div><div style="inline-size:150px">' + U.progress(o.progress, o.status, o.code) + '</div>' + U.statusBadge(o.status) + '</li>'; }).join('') + '</ul>' : '<p class="muted">None.</p>';
+      };
+      return '<section class="card stack" aria-labelledby="p-name"><div class="row nowrap" style="align-items:flex-start">' + U.avatar(uid, 56) + '<div style="flex:1"><h2 id="p-name" class="card-title" style="font-size:20px" tabindex="-1">' + esc(u.displayName) + '</h2><div class="muted">' + esc(u.jobTitle) + '</div>' +
+        '<div class="small">' + esc((O.dept(u.departmentId) || {}).name || 'Division office') + (O.team(u.teamId) ? ' · ' + esc(O.team(u.teamId).name) : '') + ' · ' + esc(O.ROLE_LABELS[u.role]) + '</div></div></div>' +
+        '<dl class="facts"><dt>Manager</dt><dd>' + (mgr ? '<a href="?user=' + mgr.id + '" data-user="' + mgr.id + '">' + esc(mgr.displayName) + '</a>' : '–') + '</dd><dt>Direct reports</dt><dd>' + (reports.length ? reports.map(function (r) { return '<a href="?user=' + r.id + '" data-user="' + r.id + '">' + esc(r.displayName) + '</a>'; }).join(', ') : '–') + '</dd>' +
+        '<dt>Goals</dt><dd>' + g.length + ' in ' + esc(O.periodLabel()) + (hidden ? ' <span class="muted small">(+' + hidden + ' private goal' + (hidden > 1 ? 's' : '') + ' you cannot see)</span>' : '') + '</dd></dl>' +
+        '<div class="row">' + (shared ? '<a class="btn btn-sm" href="meetings.html?id=' + shared.id + '">' + U.icon('meetings') + '<span>Next 1:1: ' + O.fmtWeekday(shared.date) + '</span></a>' : canMeet && O.can.nav('meetings') ? '<a class="btn btn-sm" href="meetings.html">' + U.icon('meetings') + '<span>Schedule a 1:1</span></a>' : '') +
+        '<a class="btn btn-sm btn-subtle" href="explorer.html?scope=all&owner=' + uid + '">Open in Goals &amp; OKRs</a></div>' +
+        '<h3 class="section-title">Assigned goals</h3>' + list(assigned) + '<h3 class="section-title">Individual goals</h3>' + list(personal) + '</section>';
+    }
+
+    function render() {
+      var roots = O.people().filter(function (u) { return !u.managerId; });
+      main.innerHTML = U.pageHeader({
+        title: 'People',
+        subtitle: 'Organisation chart and each person’s goals. Reporting lines come from Microsoft Entra ID (simulated); they drive “My team”, manager approvals and 1:1 meetings.',
+      }) + '<div class="people-layout"><nav class="card org-wrap" aria-label="Organisation chart"><ul class="org">' + roots.map(node).join('') + '</ul></nav><div id="profile">' + profile(selected) + '</div></div>';
+      document.querySelectorAll('[data-user]').forEach(function (a) {
+        a.addEventListener('click', function (e) {
+          e.preventDefault();
+          selected = a.getAttribute('data-user');
+          try { history.replaceState(null, '', '?user=' + selected); } catch (x) { /* ignore */ }
+          render();
+          $('p-name').focus();
+        });
+      });
+    }
+    render();
+  })();
+  </script>
+</body>
+</html>

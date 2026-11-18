@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Close a cycle · OKR Management System</title>
+  <link rel="icon" href="assets/img/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="assets/css/styles.css">
+</head>
+<body>
+  <div id="app" class="app"><noscript><p>This demo needs JavaScript. Please enable it and reload the page.</p></noscript></div>
+  <script src="assets/js/data.js"></script>
+  <script src="assets/js/core.js"></script>
+  <script src="assets/js/ui.js"></script>
+  <script>
+  (function () {
+    'use strict';
+    var O = window.OKR, U = O.ui, esc = O.esc;
+    var main = U.shell('admin', 'Close a cycle');
+    if (!main) return;
+    var $ = function (x) { return document.getElementById(x); };
+    var from = O.activeCycle();
+    var targets = O.db.cycles.filter(function (c) { return c.status === 'Planned'; });
+    var crumbs = '<nav aria-label="Breadcrumb"><ol class="breadcrumb"><li><a href="admin.html?tab=cycles">Administration</a></li><li><span aria-current="page">Close ' + esc(from.name) + '</span></li></ol></nav>';
+    if (!targets.length) {
+      main.innerHTML = U.pageHeader({ before: crumbs, title: 'Close ' + from.name }) + '<div class="msg msg-warning">Create the next cycle first (Administration › Cycles), so unfinished goals have somewhere to go.</div>';
+      return;
+    }
+    var items = O.db.okrs.filter(function (o) { return o.cycleId === from.id && !o.closedState; }).sort(O.levelOrder);
+    var decisions = {};
+    function defaultFor(o) { return o.status === 'Completed' ? 'close' : o.approvalState === 'Rejected' ? 'drop' : 'carry'; }
+    items.forEach(function (o) { decisions[o.id] = defaultFor(o); });
+
+    main.innerHTML = U.pageHeader({
+      before: crumbs, title: 'Close ' + from.name,
+      subtitle: 'Decide what happens to each goal at the end of the cycle. Carried-over goals are copied into the next cycle with their current value as the new baseline; the originals stay read-only for reporting.',
+    }) +
+    '<div class="msg msg-info" style="margin-block-end:16px">Demo: closing the cycle changes the sample data for everyone using this browser. <strong>Reset demo data</strong> in the footer restores it.</div>' +
+    '<div class="card stack" style="margin-block-end:16px"><div class="form-grid"><label class="field"><span class="field-label">Cycle to close</span><input type="text" value="' + esc(from.name + ' (' + O.fmtDate(from.startDate) + ' – ' + O.fmtDate(from.endDate) + ')') + '" readonly></label>' +
+    '<label class="field"><span class="field-label">Carry unfinished goals into</span><select id="target">' + U.selectOptions(targets.map(function (c) { return { value: c.id, label: c.name + ' (' + O.fmtDate(c.startDate) + ' – ' + O.fmtDate(c.endDate) + ')' }; })) + '</select></label></div>' +
+    '<div class="row"><span class="field-label">Set all unfinished goals to:</span><button type="button" class="btn btn-sm" data-all="carry">Carry over</button><button type="button" class="btn btn-sm" data-all="close">Close</button><button type="button" class="btn btn-sm" data-all="drop">Drop</button><button type="button" class="btn btn-sm btn-subtle" data-all="default">Reset to suggestions</button></div>' +
+    '<p id="counts" class="muted" aria-live="polite" style="margin:0"></p></div>' +
+    '<div class="card" style="padding:0"><div class="table-wrap"><table class="data"><caption class="sr-only">Goals in ' + esc(from.name) + ' and what happens to each</caption><thead><tr><th scope="col">Goal</th><th scope="col">Owner</th><th scope="col">Progress</th><th scope="col">Status</th><th scope="col">At cycle end</th></tr></thead><tbody>' +
+    items.map(function (o) {
+      return '<tr class="lvl-row-' + o.level + '"><td class="cell-title">' + U.levelChip(o.level) + ' ' + U.okrLink(o) + '</td><td class="nowrap small">' + esc((O.user(o.ownerId) || {}).displayName) + '</td><td style="min-inline-size:140px">' + U.progress(o.progress, o.status, o.code) + '</td><td>' + U.statusBadge(o.status) + '</td>' +
+        '<td><label class="sr-only" for="d-' + o.id + '">What happens to ' + esc(o.code) + '</label><select id="d-' + o.id + '" data-dec="' + o.id + '">' + U.selectOptions([{ value: 'carry', label: 'Carry over' }, { value: 'close', label: 'Close as is' }, { value: 'drop', label: 'Drop' }], decisions[o.id]) + '</select></td></tr>';
+    }).join('') + '</tbody></table></div></div>' +
+    '<div class="form-footer" style="margin-block-start:16px"><a class="btn btn-subtle" href="admin.html?tab=cycles">Cancel</a><button type="button" class="btn btn-danger" id="go">Close ' + esc(from.name) + '</button></div>';
+
+    function counts() {
+      var c = { carry: 0, close: 0, drop: 0 };
+      Object.keys(decisions).forEach(function (k) { c[decisions[k]]++; });
+      $('counts').textContent = items.length + ' goals: ' + c.carry + ' carried over, ' + c.close + ' closed, ' + c.drop + ' dropped.';
+      return c;
+    }
+    document.querySelectorAll('[data-dec]').forEach(function (s) { s.addEventListener('change', function () { decisions[s.getAttribute('data-dec')] = s.value; counts(); }); });
+    document.querySelectorAll('[data-all]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var v = b.getAttribute('data-all');
+        items.forEach(function (o) { if (v === 'default') decisions[o.id] = defaultFor(o); else if (o.status !== 'Completed') decisions[o.id] = v; $('d-' + o.id).value = decisions[o.id]; });
+        counts();
+      });
+    });
+    $('go').addEventListener('click', function () {
+      var c = counts(), to = O.cycle($('target').value);
+      U.dialog({
+        title: 'Close ' + from.name + '?',
+        body: '<p>' + c.carry + ' goals will be copied into ' + esc(to.name) + ', ' + c.close + ' closed and ' + c.drop + ' dropped. ' + esc(from.name) + ' becomes read-only and ' + esc(to.name) + ' becomes the active cycle. Everyone is notified.</p>',
+        okLabel: 'Close the cycle', okClass: 'btn-danger',
+        onOk: function () {
+          var res = O.closeCycle(from.id, decisions, to.id);
+          U.flash(from.name + ' closed', 'success', res.carry + ' goals carried over to ' + to.name + '.');
+          window.location.href = 'explorer.html?scope=all';
+        },
+      });
+    });
+    counts();
+  })();
+  </script>
+</body>
+</html>

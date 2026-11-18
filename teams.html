@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Teams &amp; Outlook · OKR Management System</title>
+  <link rel="icon" href="assets/img/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="assets/css/styles.css">
+</head>
+<body>
+  <div id="app" class="app"><noscript><p>This demo needs JavaScript. Please enable it and reload the page.</p></noscript></div>
+  <script src="assets/js/data.js"></script>
+  <script src="assets/js/core.js"></script>
+  <script src="assets/js/ui.js"></script>
+  <script>
+  (function () {
+    'use strict';
+    var O = window.OKR, U = O.ui, esc = O.esc;
+    var main = U.shell('teams', 'Teams & Outlook');
+    if (!main) return;
+    var me = O.currentUser();
+    var $ = function (x) { return document.getElementById(x); };
+    var cfg = O.db.config;
+    var chatLog = []; // chatbot conversation, kept for this page view only
+
+    function dueGoals() {
+      return O.db.okrs.filter(function (o) {
+        return o.cycleId === O.activeCycle().id && O.owns(o, me.id) && !o.closedState && o.status !== 'Completed' && ['RolledUp', 'Tasks'].indexOf(o.measurementType) < 0 && !o.dataSource;
+      }).sort(function (a, b) { return (O.isStale(b) - O.isStale(a)) || (O.isOverdue(b) - O.isOverdue(a)) || (a.dueDate < b.dueDate ? -1 : 1); }).slice(0, 3);
+    }
+    var BOT = '<span class="bot-avatar" aria-hidden="true">' + U.icon('reports') + '</span>';
+    function botMsg(time, html) { return '<div class="msg-row">' + BOT + '<div><div class="msg-meta"><strong>OKR bot</strong> · ' + esc(time) + '</div>' + html + '</div></div>'; }
+
+    function checkinCard() {
+      var goals = dueGoals();
+      if (!goals.length) return '<div class="acard"><div class="acard-title">' + U.icon('check') + ' You are up to date</div><p>None of your goals need a manual check-in this week.</p></div>';
+      return '<form class="acard" id="ci-card" novalidate><div class="acard-title">' + U.icon('checkin') + ' Check-in reminder (' + esc((O.myPrefs().reminderFrequency || cfg.reminders.interval || 'regular').toLowerCase()) + ')</div>' +
+        '<p class="small">Hi ' + esc(me.displayName.split(' ')[0]) + ', ' + goals.length + ' of your goals need an update. Reply right here – no need to open the app.</p>' +
+        goals.map(function (o, i) {
+          var input = o.measurementType === 'Binary'
+            ? '<label class="sr-only" for="cv-' + i + '">' + esc(o.code) + ' done?</label><select id="cv-' + i + '" data-goal="' + o.id + '" data-kind="value">' + U.selectOptions([{ value: '0', label: 'Not done yet' }, { value: '1', label: 'Done' }], o.current >= 1 ? '1' : '0') + '</select>'
+            : '<label class="sr-only" for="cv-' + i + '">New value for ' + esc(o.code) + ' (' + esc(o.unit || 'value') + ')</label><input type="number" step="any" id="cv-' + i + '" data-goal="' + o.id + '" data-kind="value" value="' + esc(o.current) + '"><span class="small muted">' + esc(o.unit || '') + ' · target ' + esc(O.fmtTarget(o)) + '</span>';
+          return '<div class="acard-goal"><div><strong>' + esc(o.code) + '</strong> ' + esc(o.title) + '</div><div class="small muted">' + O.pct(o.progress) + ' · ' + esc(O.STATUS[o.status].label) + ' · last update ' + O.fmtRelative(o.lastCheckInOn) + '</div>' +
+            '<div class="acard-inputs">' + input + '<label class="sr-only" for="cs-' + i + '">Status for ' + esc(o.code) + '</label><select id="cs-' + i + '" data-goal="' + o.id + '" data-kind="status">' + U.selectOptions([{ value: '', label: 'Status: suggested' }].concat(['OnTrack', 'AtRisk', 'OffTrack'].map(function (s) { return { value: s, label: O.STATUS[s].label }; }))) + '</select></div>' +
+            '<label class="sr-only" for="cn-' + i + '">Comment for ' + esc(o.code) + '</label><input type="text" id="cn-' + i + '" data-goal="' + o.id + '" data-kind="note" placeholder="What changed? Any blockers?"></div>';
+        }).join('') + '<div class="row"><button type="submit" class="btn btn-teams">Submit update</button><a class="btn btn-sm btn-subtle" href="checkin.html">Open in the app</a></div></form>';
+    }
+    function approvalCards() {
+      return O.pendingForMe().slice(0, 2).map(function (a) {
+        var o = O.okr(a.okrId), by = O.user(a.requestedById);
+        return botMsg('09:02', '<form class="acard" data-approval="' + a.id + '" novalidate><div class="acard-title">' + U.icon('approvals') + ' Approval needed: ' + esc(O.REQUEST_TYPES[a.requestType].toLowerCase()) + '</div>' +
+          '<p><strong>' + esc(o.code) + '</strong> ' + esc(o.title) + '</p><p class="small">' + esc(by.displayName) + ': ' + esc(a.summary) + '</p>' +
+          '<label class="sr-only" for="ac-' + a.id + '">Comment</label><input type="text" id="ac-' + a.id + '" placeholder="Comment (required to reject)">' +
+          '<div class="row"><button type="submit" class="btn btn-teams" data-decision="Approved">Approve</button><button type="submit" class="btn" data-decision="Rejected">Reject</button></div></form>');
+      }).join('');
+    }
+    function digestCard() {
+      if (!cfg.ai.enabled || !cfg.ai.features.agentDigest) return '';
+      var sc = O.digestScope();
+      return botMsg('Mon 08:00', '<div class="acard"><div class="acard-title">' + U.icon('ai') + ' Weekly OKR digest – ' + esc(sc.label) + '</div>' + U.insightsHtml(O.insights(sc.items), 2) + '</div>');
+    }
+    function meetingCard() {
+      var m = O.myMeetings().filter(function (x) { return x.status === 'Scheduled' && O.daysSince(x.date) <= 0; })[0];
+      if (!m) return '';
+      var other = O.user(m.managerId === me.id ? m.employeeId : m.managerId);
+      return botMsg('08:30', '<div class="acard"><div class="acard-title">' + U.icon('meetings') + ' 1:1 with ' + esc(other.displayName) + ' – ' + O.fmtWeekday(m.date) + ' ' + O.fmtTime(m.date) + '</div><p class="small">' + m.goalIds.length + ' goals and ' + m.agenda.length + ' talking points on the agenda.</p>' +
+        '<ul class="small">' + m.goalIds.slice(0, 3).map(function (g) { var o = O.okr(g); return o ? '<li>' + esc(o.code) + ' – ' + O.pct(o.progress) + ' ' + esc(O.STATUS[o.status].label) + '</li>' : ''; }).join('') + '</ul>' +
+        '<div class="row"><a class="btn btn-sm btn-teams" href="meetings.html?id=' + m.id + '">Add talking points</a></div></div>');
+    }
+
+    function chatPanel() {
+      var log = chatLog.map(function (c) { return c.me ? '<div class="msg-row mine"><div><div class="msg-meta">You</div><div class="bubble">' + esc(c.text) + '</div></div></div>' : botMsg('now', c.html); }).join('');
+      return '<div class="teams-frame" aria-label="Microsoft Teams chat (mock-up)"><div class="teams-top"><span>' + U.icon('teams') + ' Microsoft Teams · Chat with <strong>OKR bot</strong></span><span class="small">mock-up</span></div>' +
+        '<div class="teams-chat" id="chat" aria-live="polite">' +
+        (cfg.reminders.channels && cfg.reminders.channels.teams === false ? '<p class="msg msg-warning small">Teams reminders are switched off in Administration › Reminders.</p>' : botMsg('Mon 09:00', checkinCard())) +
+        approvalCards() + meetingCard() + digestCard() + log + '</div>' +
+        (cfg.ai.enabled && cfg.ai.features.chatbot ? '<form class="teams-compose" id="compose" novalidate><label class="sr-only" for="say">Message the OKR bot</label><input type="text" id="say" placeholder="Try: create a goal to reduce cable faults from 40 to 25" autocomplete="off"><button type="submit" class="btn btn-teams" aria-label="Send">' + U.icon('send') + '</button></form>' +
+          '<div class="chips-row small"><span class="muted">Try:</span> ' + ['Create a goal to reduce cable faults from 40 to 25', 'Keep transformer availability above 99.5%', 'Complete the HSE induction', 'my goals', 'help'].map(function (s) { return '<button type="button" class="chip suggestion" data-say="' + esc(s) + '">' + esc(s) + '</button>'; }).join(' ') + '</div>' : '') + '</div>';
+    }
+
+    function emailPanel() {
+      var goals = O.db.okrs.filter(function (o) { return O.owns(o, me.id) && o.cycleId === O.activeCycle().id && !o.closedState && o.status !== 'Completed'; }).slice(0, 5);
+      var p = O.myPrefs(), r = cfg.reminders;
+      return '<div class="mail-frame" aria-label="Outlook email (mock-up)"><div class="mail-head"><div class="mail-subject">Your check-in is due – ' + goals.length + ' goals need an update</div>' +
+        '<div class="small"><strong>OKR Management System</strong> &lt;okr-noreply@example.com&gt;</div><div class="small muted">To: ' + esc(me.displayName) + ' &lt;' + esc(me.email) + '&gt; · ' + esc(r.reminderDay) + ' ' + esc(r.checkInTime || '09:00') + ' (' + esc(r.timeZone || 'GST') + ')</div></div>' +
+        '<div class="mail-body"><p>Hello ' + esc(me.displayName.split(' ')[0]) + ',</p><p>It is time for your ' + esc((p.reminderFrequency || r.interval || '').toLowerCase()) + ' goal check-in. Here is where your goals stand:</p>' +
+        (goals.length ? '<table class="mail-table"><thead><tr><th>Goal</th><th>Progress</th><th>Status</th><th>Last update</th><th></th></tr></thead><tbody>' + goals.map(function (o) {
+          return '<tr><td><strong>' + esc(o.code) + '</strong> ' + esc(o.title) + '</td><td>' + O.pct(o.progress) + '</td><td>' + esc(O.STATUS[o.status].label) + '</td><td>' + O.fmtRelative(o.lastCheckInOn) + '</td><td><a href="' + (o.measurementType === 'Tasks' ? 'okr.html?id=' + o.id + '&tab=tasks' : 'checkin.html?id=' + o.id) + '">Update</a></td></tr>';
+        }).join('') + '</tbody></table>' : '<p>You have no open goals. </p>') +
+        '<p><a class="btn btn-primary" href="checkin.html">Open my check-ins</a></p><p class="small muted">Prefer Teams? You can reply to the same reminder in the Teams chat. Change how often you get reminders in <a href="notifications.html?tab=prefs">your preferences</a>' + (r.usersCanOverride ? '' : ' (your administrator has fixed the schedule)') + '.</p>' +
+        '<p class="small muted">Demo by Ducont – fictitious data. Sent by the OKR Management System.</p></div></div>';
+    }
+
+    function tabPanelIntro(text) { return '<p class="muted" style="max-inline-size:900px">' + text + '</p>'; }
+    main.innerHTML = U.pageHeader({
+      title: 'Teams & Outlook',
+      subtitle: 'How people use the OKR system without leaving Microsoft 365: check-in cards in Teams chat, approvals, the AI digest, a chatbot and reminder emails. These are clickable mock-ups – actions here update the real demo data.',
+    }) +
+    '<section id="tabs"><div class="tablist" role="tablist" aria-label="Surface">' + U.tabButton('chat', 'Teams chat') + U.tabButton('email', 'Outlook email') + U.tabButton('tab', 'Teams app tab') + '</div>' +
+    U.tabPanel('chat', tabPanelIntro('The OKR bot posts adaptive cards on the reminder schedule set by the administrator. Owners update values and status inside the card; approvers decide inside the card. Signed in as <strong>' + esc(me.displayName) + '</strong> – switch “View as” to see other people’s chats.') + '<div id="chat-wrap">' + chatPanel() + '</div>') +
+    U.tabPanel('email', tabPanelIntro('The same reminder goes by email when the email channel is on. Links open the check-in form.') + emailPanel()) +
+    U.tabPanel('tab', tabPanelIntro('The full application is pinned as a personal app and as a channel tab in Teams, so the pages of this demo are what people see inside Teams.') +
+      '<div class="teams-frame"><div class="teams-top"><span>' + U.icon('teams') + ' Microsoft Teams · <strong>OKR</strong> app</span><span class="small">mock-up</span></div><div class="tab-preview"><iframe title="OKR app inside a Teams tab (preview)" src="index.html" loading="lazy"></iframe></div></div>') + '</section>';
+    U.tabs($('tabs'));
+    bindChat();
+
+    function bindChat() {
+      var form = $('ci-card');
+      if (form) form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        var done = [];
+        dueGoals().forEach(function (o) {
+          var val = form.querySelector('[data-goal="' + o.id + '"][data-kind="value"]').value;
+          var st = form.querySelector('[data-goal="' + o.id + '"][data-kind="status"]').value;
+          var note = form.querySelector('[data-goal="' + o.id + '"][data-kind="note"]').value.trim();
+          if (val === '' || (Number(val) === Number(o.current) && !note && !st)) return;
+          O.addCheckIn({ okrId: o.id, value: Number(val), status: st || null, narrative: note || 'Updated from Teams.', confidence: null, channel: 'Microsoft Teams' });
+          done.push(o.code + ' → ' + O.pct(o.progress) + ' (' + O.STATUS[o.status].label + ')');
+        });
+        form.outerHTML = '<div class="acard acard-done"><div class="acard-title">' + U.icon('check') + ' Thanks, ' + esc(me.displayName.split(' ')[0]) + '!</div>' + (done.length ? '<p>Updated: ' + esc(done.join(', ')) + '. Parent goals were recalculated.</p>' : '<p>No changes – nothing was saved.</p>') + '</div>';
+        if (done.length) U.toast('Check-in saved from Teams', 'success', done.join(', '));
+      });
+      document.querySelectorAll('[data-approval]').forEach(function (f) {
+        var decision = 'Approved';
+        f.querySelectorAll('[data-decision]').forEach(function (b) { b.addEventListener('click', function () { decision = b.getAttribute('data-decision'); }); });
+        f.addEventListener('submit', function (e) {
+          e.preventDefault();
+          var input = f.querySelector('input');
+          if (decision === 'Rejected' && !input.value.trim()) { input.setAttribute('aria-invalid', 'true'); input.placeholder = 'A comment is required to reject'; input.focus(); return; }
+          O.decide(f.getAttribute('data-approval'), decision, input.value.trim());
+          f.outerHTML = '<div class="acard acard-done"><div class="acard-title">' + U.icon('check') + ' ' + esc(decision) + ' by ' + esc(me.displayName) + '</div><p class="small">The requester has been notified.</p></div>';
+          U.refreshNav();
+        });
+      });
+      var compose = $('compose');
+      if (compose) {
+        compose.addEventListener('submit', function (e) { e.preventDefault(); say($('say').value); });
+        document.querySelectorAll('[data-say]').forEach(function (b) { b.addEventListener('click', function () { say(b.getAttribute('data-say')); }); });
+      }
+      var created = document.querySelectorAll('[data-create-goal]');
+      created.forEach(function (b) {
+        b.addEventListener('click', function () {
+          var p = JSON.parse(b.getAttribute('data-create-goal'));
+          var level = O.can.create(p.level) ? p.level : (O.can.create('Personal') ? 'Personal' : null);
+          if (!level) { U.toast('Your role cannot create goals', 'error'); return; }
+          var cyc = O.activeCycle();
+          var o = O.createOkr({ level: level, parentId: null, title: p.title, description: '', ownerId: me.id, departmentId: me.departmentId || 'd-om', teamId: me.teamId || null,
+            visibility: level === 'Personal' && cfg.permissions.privateByDefault ? 'Private' : 'Public', measurementType: p.measurementType, unit: p.unit, baseline: p.baseline, target: p.target,
+            weight: 10, startDate: cyc.startDate, dueDate: cyc.endDate, labels: [], contributesToParent: false }, true);
+          chatLog.push({ html: '<div class="acard acard-done"><div class="acard-title">' + U.icon('check') + ' Created ' + esc(o.code) + '</div><p class="small">' + esc(O.LEVEL_LABELS[o.level]) + ' “' + esc(o.title) + '”. ' + (o.approvalState === 'PendingApproval' ? 'Sent for approval.' : '') + ' <a href="okr.html?id=' + o.id + '">Open it</a> to align it to a parent goal.</p></div>' });
+          rerenderChat();
+        });
+      });
+    }
+    function rerenderChat() { $('chat-wrap').innerHTML = chatPanel(); bindChat(); var c = $('chat'); c.scrollTop = c.scrollHeight; if ($('say')) $('say').focus(); }
+    function say(text) {
+      text = (text || '').trim();
+      if (!text) return;
+      chatLog.push({ me: true, text: text });
+      var t = text.toLowerCase(), reply;
+      if (t === 'help') reply = '<div class="acard"><p class="small">I can create a goal from a sentence (“create a goal to …”, “keep … above …”), list <strong>my goals</strong>, and send your check-in reminders. Everything I create still follows your organisation’s approval rules.</p></div>';
+      else if (t === 'my goals') {
+        var g = O.myGoals(O.db.okrs.filter(function (o) { return o.cycleId === O.activeCycle().id; }));
+        reply = '<div class="acard"><div class="acard-title">Your goals (' + g.length + ')</div>' + (g.length ? '<ul class="small">' + g.slice(0, 8).map(function (o) { return '<li><a href="okr.html?id=' + o.id + '">' + esc(o.code) + '</a> ' + esc(o.title) + ' – ' + O.pct(o.progress) + ', ' + esc(O.STATUS[o.status].label) + '</li>'; }).join('') + '</ul>' : '<p class="small">You have no goals yet.</p>') + '</div>';
+      } else {
+        var p = O.aiParseGoal(text);
+        var level = O.can.create('Personal') ? 'Personal' : p.level; // quick-create as an individual goal; "Edit details first" lets people pick a parent and type
+        reply = '<div class="acard"><div class="acard-title">' + U.icon('ai') + ' Here is the goal I understood</div><dl class="facts small"><dt>Title</dt><dd>' + esc(p.title) + '</dd><dt>Type</dt><dd>' + esc(O.LEVEL_LABELS[level]) + '</dd><dt>Measured as</dt><dd>' + esc(O.MEASUREMENT_LABELS[p.measurementType]) + '</dd>' +
+          (p.measurementType !== 'Binary' ? '<dt>Baseline → target</dt><dd>' + esc(p.baseline + ' → ' + p.target + (p.unit ? ' ' + p.unit : '')) + '</dd>' : '') + '<dt>Owner</dt><dd>' + esc(me.displayName) + '</dd></dl>' +
+          '<div class="row"><button type="button" class="btn btn-sm btn-teams" data-create-goal="' + esc(JSON.stringify(Object.assign({}, p, { level: level }))) + '">Create goal</button><a class="btn btn-sm" href="okr-edit.html?level=' + (O.can.create(p.level) ? p.level : level) + '&title=' + encodeURIComponent(p.title) + '&measurementType=' + p.measurementType + '&baseline=' + p.baseline + '&target=' + p.target + '&unit=' + encodeURIComponent(p.unit) + '">Edit details first</a></div></div>';
+      }
+      chatLog.push({ html: reply });
+      rerenderChat();
+    }
+  })();
+  </script>
+</body>
+</html>

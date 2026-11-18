@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Bulk import · OKR Management System</title>
+  <link rel="icon" href="assets/img/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="assets/css/styles.css">
+</head>
+<body>
+  <div id="app" class="app"><noscript><p>This demo needs JavaScript. Please enable it and reload the page.</p></noscript></div>
+  <script src="assets/js/data.js"></script>
+  <script src="assets/js/core.js"></script>
+  <script src="assets/js/ui.js"></script>
+  <script>
+  (function () {
+    'use strict';
+    var O = window.OKR, U = O.ui, esc = O.esc;
+    var main = U.shell('explorer', 'Bulk import');
+    if (!main) return;
+    var $ = function (x) { return document.getElementById(x); };
+    if (!O.can.create()) { main.innerHTML = U.pageHeader({ title: 'Bulk import' }) + '<div class="msg msg-warning">Your role cannot create goals' + (O.currentCycle().status === 'Closed' ? ' in a closed cycle' : '') + '.</div>'; return; }
+    var cyc = O.currentCycle();
+    var EXAMPLE = [
+      ['Key Result', 'O1.1', 'Reduce repeat cable faults from 30 to 18 per year', 'Counted from the fault database.', 'priya.raman@example.com', 'O&M', 'Reach a number', 'faults', '30', '18', '20', cyc.startDate, cyc.endDate, 'Reliability|Safety'],
+      ['Individual goal', 'KR1.1.1', 'Complete the cable fault-location course', '', 'khalid.mansoori@example.com', 'O&M', 'Done / not done', '', '', '', '10', cyc.startDate, cyc.endDate, 'Quick win'],
+    ];
+    var results = null;
+
+    main.innerHTML = U.pageHeader({ title: 'Bulk import goals', subtitle: 'Create many goals at once from an Excel sheet. Rows are checked against the same rules as the goal form before anything is saved.', before: '<nav aria-label="Breadcrumb"><ol class="breadcrumb"><li><a href="explorer.html">Goals &amp; OKRs</a></li><li><span aria-current="page">Import</span></li></ol></nav>' }) +
+      '<ol class="steps"><li class="card stack"><h2 class="card-title">1. Get the template</h2><p class="small" style="margin:0">One row per goal. Columns: ' + esc(O.IMPORT_COLUMNS.join(', ')) + '. Use the codes shown in Goals &amp; OKRs for “Parent code”, department codes (TPL, GP, O&amp;M, AM), owner email addresses, and label names separated by “|”. Parents must already exist in ' + esc(cyc.name) + '; to import a parent and its children, import the parents first.</p>' +
+        '<div class="row"><button type="button" class="btn" id="tpl-xlsx">' + U.icon('download') + '<span>Excel template</span></button><button type="button" class="btn btn-subtle" id="tpl-csv">CSV template</button></div></li>' +
+      '<li class="card stack"><h2 class="card-title">2. Upload or paste</h2><p class="small" style="margin:0">In Excel, choose <em>File › Save As › CSV UTF-8</em>, then upload the file – or copy the rows (including the header) and paste them below.</p>' +
+        '<div class="row"><label class="btn" for="file">' + U.icon('upload') + '<span>Choose CSV file</span></label><input type="file" id="file" accept=".csv,text/csv,.txt" class="sr-only"><span class="small muted" id="file-name">No file chosen</span></div>' +
+        '<label class="field"><span class="field-label">…or paste rows from Excel</span><textarea id="paste" rows="6" placeholder="Level&#9;Parent code&#9;Title&#9;…"></textarea></label>' +
+        '<div class="row"><button type="button" class="btn btn-primary" id="check">' + U.icon('check') + '<span>Check rows</span></button><button type="button" class="btn btn-subtle" id="example">Load example rows</button></div></li>' +
+      '<li class="card stack" id="step3" hidden><h2 class="card-title">3. Review and import</h2><div id="summary" aria-live="polite"></div><div id="preview"></div>' +
+        '<label class="check"><input type="checkbox" id="submit-appr" checked> Submit goals that need approval straight away (otherwise they are saved as drafts)</label>' +
+        '<div class="row"><button type="button" class="btn btn-primary" id="do-import">' + U.icon('upload') + '<span>Import valid rows</span></button></div></li></ol>';
+
+    var cols = O.IMPORT_COLUMNS.map(function (c, i) { return { label: c, value: function (r) { return r[i]; }, width: [14, 12, 50, 30, 28, 12, 18, 10, 10, 10, 8, 12, 12, 24][i] }; });
+    $('tpl-xlsx').addEventListener('click', function () { O.downloadXlsx('okr-import-template.xlsx', 'Goals', EXAMPLE, cols); });
+    $('tpl-csv').addEventListener('click', function () { O.downloadCsv('okr-import-template.csv', O.toCsv(EXAMPLE, cols)); });
+    $('example').addEventListener('click', function () { $('paste').value = [O.IMPORT_COLUMNS].concat(EXAMPLE).map(function (r) { return r.join('\t'); }).join('\n'); $('paste').focus(); });
+    $('file').addEventListener('change', function () {
+      var f = $('file').files[0];
+      if (!f) return;
+      $('file-name').textContent = f.name;
+      var reader = new FileReader();
+      reader.onload = function () { $('paste').value = String(reader.result); check(); };
+      reader.readAsText(f);
+    });
+    $('check').addEventListener('click', check);
+
+    function check() {
+      var rows = O.parseCsv($('paste').value || '');
+      if (rows.length < 2) { U.toast('Nothing to check', 'error', 'Include the header row and at least one goal.'); $('paste').focus(); return; }
+      var header = rows[0].map(function (h) { return h.trim().toLowerCase(); });
+      var missing = ['level', 'title', 'owner email', 'department code'].filter(function (h) { return header.indexOf(h) < 0; });
+      if (missing.length) { U.toast('Header row is missing columns', 'error', missing.join(', ')); return; }
+      results = O.validateImport(rows);
+      var ok = results.filter(function (r) { return !r.errors.length; });
+      $('step3').hidden = false;
+      $('summary').innerHTML = '<div class="msg ' + (ok.length === results.length ? 'msg-success' : 'msg-warning') + '"><strong>' + ok.length + ' of ' + results.length + ' rows are ready.</strong> ' + (ok.length < results.length ? 'Rows with problems are skipped – fix them in Excel and check again.' : '') + '</div>';
+      $('preview').innerHTML = '<div class="table-wrap"><table class="data"><thead><tr><th scope="col">Row</th><th scope="col">Goal type</th><th scope="col">Title</th><th scope="col">Owner</th><th scope="col">Measured as</th><th scope="col">Result</th></tr></thead><tbody>' +
+        results.map(function (r) {
+          var f = r.fields;
+          return '<tr><td class="num">' + r.n + '</td><td>' + esc(f.level ? O.LEVEL_LABELS[f.level] : '?') + '</td><td>' + esc(f.title) + (r.parentCode ? '<div class="small muted">under ' + esc(r.parentCode) + '</div>' : '') + '</td><td class="small">' + esc((O.user(f.ownerId) || {}).displayName || '?') + '</td><td class="small">' + esc(f.measurementType ? O.MEASUREMENT_LABELS[f.measurementType] : '?') + '</td>' +
+            '<td>' + (r.errors.length ? '<ul class="error-list">' + r.errors.map(function (e) { return '<li>' + esc(e) + '</li>'; }).join('') + '</ul>' : '<span class="chip dec-Approved">Ready</span>') + '</td></tr>';
+        }).join('') + '</tbody></table></div>';
+      $('do-import').disabled = !ok.length;
+      $('summary').scrollIntoView({ block: 'nearest' });
+    }
+    $('do-import').addEventListener('click', function () {
+      var ok = (results || []).filter(function (r) { return !r.errors.length; });
+      if (!ok.length) return;
+      var submit = $('submit-appr').checked;
+      var created = O.importOkrs(ok, submit);
+      U.flash(created.length + ' goals imported', 'success', submit ? 'Goals that need approval were submitted.' : 'Goals that need approval were saved as drafts.');
+      window.location.href = 'explorer.html?view=list&scope=all&flag=';
+    });
+  })();
+  </script>
+</body>
+</html>
