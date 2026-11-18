@@ -1,88 +1,108 @@
 # OKR Management System – Transmission Power (demo)
 
-A clickable demo of an OKR (Objectives and Key Results) management system, proposed by Ducont for the DEWA Transmission Power Division.
+A clickable demo of an OKR (Objectives and Key Results) and goal-management system, proposed by Ducont for the DEWA Transmission Power Division. Version 2 adds the goal-management features found in Microsoft 365-native tools such as Teamflect:
+- individual goals
+- new progress types
+- automatic data feeds
+- check-ins and approvals in Teams
+- 1:1 meetings
+- an AI agent
+- templates, bulk import and cycle close
 
 > **Demo environment with fictitious data – not an official DEWA system.**
 > Every name, project and figure is made up. There is no backend, no login and no secrets.
 
+**Live demo:** https://ramesh-ror.github.io/okr-management-demo/
+**Rebuilding it in Power Apps:** see [docs/POWER-APPS-FEASIBILITY.md](docs/POWER-APPS-FEASIBILITY.md).
+
 ## How to open it
 
 The demo is plain HTML, CSS and JavaScript. It needs no build step and no installation.
+- **From disk:** double-click `index.html`.
+- **From a web server:** host the folder on any static server.
 
-- **From disk:** double-click `index.html`. It works offline in Edge, Chrome or Firefox.
-- **From a web server:** copy the whole folder to any static host (IIS, SharePoint document library, GitHub Pages, Azure Static Web Apps) and open `index.html`.
-
-Keep the folder structure as it is: every page loads `assets/`.
+Keep the folder structure as it is.
 
 ## Pages
 
 | Page | File | What it shows |
 |---|---|---|
-| Home | `index.html` | KPI tiles, goals at a glance, key results by status, progress by department, items that need attention, recent activity |
-| OKR Explorer | `explorer.html` | The full hierarchy as an expandable tree or a flat list. Filter by text, level, department, status, owner and flag, then export to CSV |
-| OKR detail | `okr.html?id=…` | Progress with the expected-progress line, details, children with weight shares, check-in history, comments, approvals and activity. Includes a "Request change" form |
-| Create / edit | `okr-edit.html` | A form with validation that follows the level rules set in Administration, a live weight-share preview, and AI-assisted wording |
-| Check-in | `checkin.html` | A list ordered by urgency. The form (`checkin.html?id=…`) suggests a status and shows a live roll-up preview up to the goal |
-| Approvals | `approvals.html` | Requests waiting for you, all pending, decided and your own requests. Approve or reject them with a comment |
-| Reports | `reports.html` | An executive summary, a filterable operational table with CSV export, and check-in compliance by department. Print or save as PDF |
-| Notifications | `notifications.html` | Per-person notifications. Filter them, and mark them read or unread |
-| Administration | `admin.html` | Levels and approvals, reminder policy, role assignments, audit log with CSV export, AI Assist switches, API credentials, and reset of the demo data |
-| AI Assist | the button in the top bar | A side panel that drafts objectives, suggests key results and summarises check-ins. The suggestions are pre-written, and no data leaves the browser |
+| Home | `index.html` | KPIs, the AI agent's weekly digest, company goals (or *my goals* for employees), upcoming 1:1s, items needing attention, latest updates |
+| Goals & OKRs | `explorer.html` | My goals / My team / All goals; Tree, List, People and Feed views; filters for type, department, status, owner, label, flag and progress range; Excel/CSV export; import |
+| Goal detail | `okr.html?id=…` | Progress (including threshold KPIs), automatic data-source card with *Sync now*, Planner/To Do tasks, aligned individual goals, check-ins, private comments, approvals, activity, duplicate, delete |
+| Create / edit | `okr-edit.html` | Templates, all goal types including individual goals, co-owners, labels, nine progress types, data source, task list, *Write with AI* |
+| Bulk import | `import.html` | Excel template, upload or paste, per-row validation, then import |
+| Check-in | `checkin.html` | Your goals, your team's, or everything you can update; the form handles done/not-done, threshold KPIs and auto-synced goals |
+| 1:1 meetings | `meetings.html` | Manager/employee meetings with goals on the agenda, talking points, shared notes, action items, *complete and schedule next* |
+| People | `people.html` | Org chart (simulated as synced from Entra ID) and each person's goals |
+| Approvals | `approvals.html` | Routed by role, or to the line manager |
+| Reports | `reports.html` | Executive summary, operational detail (Excel export), check-in compliance |
+| Notifications | `notifications.html` | Inbox and personal reminder preferences (frequency, Teams or email) |
+| Teams & Outlook | `teams.html` | Clickable mock-ups (actions update the demo data):<br>• check-in cards answered inside Teams chat<br>• approval cards<br>• the AI digest<br>• a chatbot that creates goals<br>• the reminder email<br>• the app as a Teams tab |
+| Administration | `admin.html` | Goal-type names and approvals, progress types and status names, labels, templates, cycles, reminders, permissions grid, notification switches, data connections, roles, audit log, AI, API access, demo reset |
+| Close a cycle | `cycle-close.html` | Carry over, close or drop each goal; the next cycle becomes active |
 
 ## Things to try
 
-1. Use **View as** in the top bar to switch between the five roles. Each role sees a different set of screens and actions.
-   - Executive – Samira Haddad
-   - VDO – Noura Rahimi
-   - Department Coordinator – Mariam Darwish
-   - OKR Champion – Priya Raman
-   - Platform Administrator – Elena Marković
-2. As the **OKR Champion**, open *Check-in*, update `ACT-06`, and watch the roll-up preview recalculate `INI-03`, `KR1.1.3`, `O1.1` and goal `G1`.
-3. As the **VDO**, open *Approvals* and approve or reject the new objective `O3.3`.
-4. Use the **Cycle** selector to switch between FY2026 and its quarters (Q1–Q4).
-5. Add `?dir=rtl` to any page URL to check the right-to-left layout.
+Use **View as** in the top bar to switch between the six roles:
+- Executive – Samira Haddad
+- VDO – Noura Rahimi
+- Department Coordinator – Mariam Darwish
+- OKR Champion – Priya Raman
+- Employee – Khalid Mansoori
+- Platform Administrator – Elena Marković
+
+You can also add `?as=Employee` (or any role) to a URL.
+
+1. **Employee → Teams & Outlook:** update two goals inside the Teams check-in card, then type *"Keep my overtime below 20 hours per month"* to the bot.
+2. **OKR Champion → `ACT-09`:** tick a Planner task and watch the progress roll up.
+3. **Department Coordinator → `KR1.2.4`:** a "stay above 99.95%" KPI fed by an API. Press *Sync now*.
+4. **Department Coordinator → 1:1 meetings:** schedule a 1:1 with suggested goals, add a talking point, then complete it.
+5. **Employee:** create a *private* individual goal. Switch to OKR Champion (it is hidden), then to Department Coordinator (the manager can see it).
+6. **Platform Administrator → Administration › Permissions:** route approvals to line managers, then create a key result as the OKR Champion.
+7. **Platform Administrator → Cycles › Close cycle:** carry FY2026 into FY2027. Reset the demo data afterwards.
 
 ## How progress is calculated
 
-- **Measured items:** progress = (current − baseline) ÷ (target − baseline), capped at 0–100 %. This also works when the target is lower than the baseline. For milestone items, progress = current ÷ target.
-- **Rolled-up items:** progress = Σ(child progress × weight) ÷ Σ(weights).
+- **Reach a number, %, or AED:** progress = (current − baseline) ÷ (target − baseline), capped at 0–100%. This also works for decreasing targets.
+- **Milestones:** done ÷ total. **Done / not done:** 0% or 100%. **Tasks:** tasks done ÷ all tasks.
+- **Stay above / stay below:** 100% while the threshold is met. Otherwise, the share of the way from the starting value to the threshold. Status is On track when met, At risk when at least 80% of the way there, and Off track otherwise.
+- **Roll-up:** Σ(child progress × weight) ÷ Σ(weights). Individual goals align without counting unless the owner chooses to count them. Weights can be switched off.
 - **Status:**
-  1. Completed at 100 %.
-  2. Off track once the due date has passed.
+  1. Completed at 100%.
+  2. Off track once overdue.
   3. Otherwise, the owner's reported status if they set one.
-  4. Otherwise, a suggestion from the gap to expected (linear) progress: up to 10 points behind is On track, up to 25 points behind is At risk, and anything more is Off track.
-- **Stale:** a measured item with no check-in for longer than the stale period set in Administration (30 days by default).
+  4. Otherwise, a suggestion from the gap to linear expected progress: up to 10 points behind is On track, up to 25 is At risk, more is Off track.
 
-The demo clock is fixed at **11 Nov 2026**, so the sample data always looks the same.
+  Automatic status can be switched off.
+
+The demo clock is fixed at **11 Nov 2026**.
 
 ## Where changes are stored
 
-Changes are saved in the browser's `localStorage` so that they carry across pages. This covers check-ins, comments, approvals, new items and settings. **Reset demo data** in the footer or under *Administration → Demo data* restores the original sample.
+Changes are saved in the browser's `localStorage`. **Reset demo data**, in the footer or in Administration, restores the sample.
 
 ## Folder structure
 
 ```
-index.html  explorer.html  okr.html  okr-edit.html  checkin.html
-approvals.html  reports.html  notifications.html  admin.html
-assets/
-  css/styles.css     all styling (brand colour #007A3D in :root; logical properties for RTL)
-  js/data.js         fictitious sample data (window.OKR_SEED)
-  js/core.js         data store, roll-up and status rules, permissions, formatting, CSV
-  js/ui.js           page shell, components, SVG charts, dialogs, tabs, AI Assist panel
-  img/favicon.svg
+*.html               one file per page (page-specific script at the bottom)
+assets/css/styles.css
+assets/js/data.js    fictitious sample data (window.OKR_SEED)
+assets/js/core.js    data store, roll-up/status rules, permissions, AI rules, import, Excel export
+assets/js/ui.js      page shell, components, SVG charts, dialogs, tabs, AI Assist panel
+docs/POWER-APPS-FEASIBILITY.md
 ```
-
-Each page holds its own page-specific script at the bottom of the file.
 
 ## Accessibility
 
-- A skip link, landmarks, and labelled form controls.
-- Error summaries, with `aria-invalid` on the fields that have errors.
+- Skip link, landmarks and labelled controls.
+- Error summaries and `aria-invalid` on fields with errors.
 - Native `<dialog>` for modal dialogs.
-- Keyboard-operable tabs and tree toggles.
-- Status is never shown by colour alone: each status has a shape and a label.
+- Keyboard-operable tabs and tree.
+- Status shown by shape and text, not colour alone.
 - Every chart has a "Show table" alternative.
-- Support for reduced motion and Windows high-contrast (forced colours).
+- Supports reduced motion and forced colours.
+- Right-to-left layout with `?dir=rtl`.
 
 ## Licence
 
