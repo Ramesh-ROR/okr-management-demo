@@ -16,9 +16,12 @@
     home: '<path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v10h5v-6h3v6h5V10"/>',
     explorer: '<rect x="3" y="3" width="7" height="5" rx="1.2"/><rect x="14" y="10" width="7" height="4.5" rx="1.2"/><rect x="14" y="16.5" width="7" height="4.5" rx="1.2"/><path d="M6.5 8v10.75H14M6.5 12.25H14"/>',
     checkin: '<path d="m3 17 6-6 4 4 8-8"/><path d="M15 7h6v6"/>',
+    meetings: '<rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/><circle cx="9.5" cy="15" r="1.6"/><circle cx="14.5" cy="15" r="1.6"/>',
+    people: '<rect x="9" y="3" width="6" height="4.5" rx="1"/><rect x="3" y="16.5" width="6" height="4.5" rx="1"/><rect x="15" y="16.5" width="6" height="4.5" rx="1"/><path d="M12 7.5v4.5M6 16.5v-4.5h12v4.5"/>',
     approvals: '<rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V2.75h6V4"/><path d="m8.75 12.75 2.25 2.25 4.25-4.5"/>',
     reports: '<path d="M3 21h18"/><path d="M6.5 17v-5M11 17V6M15.5 17V9.5M20 17v-3"/>',
     notifications: '<path d="M6 16v-5a6 6 0 0 1 12 0v5l1.75 2H4.25z"/><path d="M10 20.5a2 2 0 0 0 4 0"/>',
+    teams: '<path d="M4 5h16v11H9.5L5 20v-4H4z"/><path d="M8 9.5h8M8 12.5h5"/>',
     admin: '<path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/>',
     ai: '<path d="m11 3 1.9 5.1L18 10l-5.1 1.9L11 17l-1.9-5.1L4 10l5.1-1.9z"/><path d="m18.5 15 .9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9z"/>',
     search: '<circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5"/>',
@@ -27,13 +30,22 @@
     chevron: '<path d="m9 6 6 6-6 6"/>',
     info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/>',
     download: '<path d="M12 4v11M7 10.5l5 5 5-5"/><path d="M4 19.5h16"/>',
+    upload: '<path d="M12 16V5M7 9.5l5-5 5 5"/><path d="M4 19.5h16"/>',
     print: '<path d="M7 9V3.5h10V9"/><rect x="3.5" y="9" width="17" height="8" rx="1.5"/><path d="M7 14h10v6.5H7z"/>',
     edit: '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13.5 6.5 4 4"/>',
+    copy: '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5.5A1.5 1.5 0 0 0 14.5 4h-9A1.5 1.5 0 0 0 4 5.5v9A1.5 1.5 0 0 0 5.5 16H8"/>',
+    trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
     check: '<path d="m5 12.5 4.5 4.5L19 7.5"/>',
     reset: '<path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v5h5"/>',
+    sync: '<path d="M20 11a8 8 0 0 0-14.3-4.9L4 8"/><path d="M4 3v5h5"/><path d="M4 13a8 8 0 0 0 14.3 4.9L20 16"/><path d="M20 21v-5h-5"/>',
+    lock: '<rect x="5" y="10.5" width="14" height="10" rx="2"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/>',
+    tag: '<path d="M3.5 12.5V4h8.5l8.5 8.5-8.5 8.5z"/><circle cx="8" cy="8.5" r="1.4"/>',
+    link: '<path d="M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1"/><path d="M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1"/>',
     table: '<rect x="3.5" y="4.5" width="17" height="15" rx="1.5"/><path d="M3.5 9.5h17M3.5 14.5h17M9.5 9.5v10"/>',
     chart: '<path d="M4 20V4"/><path d="M4 20h16"/><path d="m7 15 4-4 3 3 5-6"/>',
     comment: '<path d="M4 5h16v11H9l-5 4z"/>',
+    send: '<path d="M4 12 20 4l-4 16-4-6z"/><path d="m12 14 8-10"/>',
+    mail: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3.5 6.5 8.5 7 8.5-7"/>',
     flag: '<path d="M5 21V4"/><path d="M5 4h12l-2 4 2 4H5"/>',
   };
   function icon(name, cls) {
@@ -45,74 +57,90 @@
     var st = O.STATUS[s] || O.STATUS.NotStarted;
     return '<span class="badge status-' + esc(s) + '"><span class="glyph" aria-hidden="true">' + st.glyph + '</span>' + esc(st.label) + '</span>';
   }
-  function levelChip(level) {
-    return '<span class="chip lvl lvl-' + esc(level) + '">' + esc(O.LEVEL_LABELS[level] || level) + '</span>';
-  }
+  function levelChip(level) { return '<span class="chip lvl lvl-' + esc(level) + '">' + esc(O.LEVEL_LABELS[level] || level) + '</span>'; }
   function approvalChip(state) {
     if (!state || state === 'Approved') return '';
     return '<span class="chip appr-' + esc(state) + '">' + esc(O.APPROVAL_STATES[state] || state) + '</span>';
   }
-  function decisionChip(decision) {
-    return '<span class="chip dec-' + esc(decision) + '">' + esc(decision) + '</span>';
+  function decisionChip(decision) { return '<span class="chip dec-' + esc(decision) + '">' + esc(decision) + '</span>'; }
+  function labelChips(o) {
+    return (o.labels || []).map(function (id) {
+      var l = O.label(id);
+      return l ? '<span class="chip label-chip" style="background:' + esc(l.bg) + ';color:' + esc(l.ink) + ';border-color:' + esc(l.bg) + '">' + esc(l.name) + '</span>' : '';
+    }).join(' ');
   }
-  function progress(value, status, label) {
+  function visibilityChip(o) {
+    if (!o.visibility || o.visibility === 'Public') return '';
+    return '<span class="chip vis-chip" title="' + (o.visibility === 'Private' ? 'Visible to the owner, co-owners, their managers and executives' : 'Visible to the owning department') + '">' + icon('lock') + esc(o.visibility === 'Private' ? 'Private' : 'Department only') + '</span>';
+  }
+  function sourceChip(o) {
+    if (!o.dataSource) return '';
+    var c = O.connection(o.dataSource.connectionId);
+    return c ? '<span class="chip src-chip" title="' + esc(c.name + ' · ' + o.dataSource.field) + '">' + icon('sync') + esc(O.CONNECTION_TYPES[c.type]) + '</span>' : '';
+  }
+  function progress(value, status, labelText) {
     var v = Math.max(0, Math.min(100, Number(value) || 0));
-    return '<div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + Math.round(v) + '" aria-label="' + esc((label || 'Progress') + ': ' + Math.round(v) + '%') + '">' +
+    return '<div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + Math.round(v) + '" aria-label="' + esc((labelText || 'Progress') + ': ' + Math.round(v) + '%') + '">' +
       '<span class="progress-track"><span class="progress-fill fill-' + esc(status || 'OnTrack') + '" style="inline-size:' + v + '%"></span></span>' +
       '<span class="progress-val">' + Math.round(v) + '%</span></div>';
   }
   var AVATAR_COLORS = ['#0B6A36', '#4F3E99', '#8E3A1E', '#00607A', '#7A2E62', '#5A5F00', '#1F4E9A', '#6B4A2B'];
-  function initials(name) {
-    return name.split(/\s+/).filter(Boolean).map(function (p) { return p[0]; }).slice(0, 2).join('').toUpperCase();
-  }
+  function initials(name) { return name.split(/\s+/).filter(Boolean).map(function (p) { return p[0]; }).slice(0, 2).join('').toUpperCase(); }
   function avatar(userId, size) {
     var u = O.user(userId);
     var name = u ? u.displayName : 'Unassigned';
     var h = 0;
     for (var i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
     var px = size || 28;
-    return '<span class="avatar" aria-hidden="true" style="background:' + AVATAR_COLORS[h % AVATAR_COLORS.length] + ';inline-size:' + px + 'px;block-size:' + px + 'px;font-size:' + Math.round(px * 0.4) + 'px">' + esc(initials(name)) + '</span>';
+    var bg = userId === 'sys' ? '#5F5F5F' : AVATAR_COLORS[h % AVATAR_COLORS.length];
+    return '<span class="avatar" aria-hidden="true" style="background:' + bg + ';inline-size:' + px + 'px;block-size:' + px + 'px;font-size:' + Math.round(px * 0.4) + 'px">' + (userId === 'sys' ? '⟳' : esc(initials(name))) + '</span>';
   }
   function person(userId, sub) {
     var u = O.user(userId);
     return '<span class="person">' + avatar(userId) + '<span><span class="person-name">' + esc(u ? u.displayName : 'Unassigned') + '</span>' +
       (sub && u ? '<span class="person-sub">' + esc(u.jobTitle) + '</span>' : '') + '</span></span>';
   }
+  function owners(o) {
+    var co = (o.coOwnerIds || []).map(function (id) { return O.user(id); }).filter(Boolean);
+    return person(o.ownerId) + (co.length ? ' <span class="small muted" title="Co-owners: ' + esc(co.map(function (u) { return u.displayName; }).join(', ')) + '">+' + co.length + ' co-owner' + (co.length > 1 ? 's' : '') + '</span>' : '');
+  }
   function flagChips(o) {
     return O.flags(o).map(function (f) {
-      var cls = f === 'Overdue' ? 'flag-overdue' : f === 'Stale' ? 'flag-stale' : f === 'Due soon' ? 'flag-due' : 'flag-appr';
+      var cls = f === 'Overdue' ? 'flag-overdue' : f === 'Stale' ? 'flag-stale' : f === 'Due soon' ? 'flag-due' : /Carried|Closed|Dropped/.test(f) ? 'flag-closed' : 'flag-appr';
       return '<span class="chip ' + cls + '">' + esc(f) + '</span>';
     }).join(' ');
   }
   function okrLink(o, withTitle) {
     if (!o) return '–';
-    return '<a href="okr.html?id=' + encodeURIComponent(o.id) + '" class="okr-link"><span class="code">' + esc(o.code) + '</span>' +
-      (withTitle === false ? '' : ' ' + esc(o.title)) + '</a>';
+    return '<a href="okr.html?id=' + encodeURIComponent(o.id) + '" class="okr-link"><span class="code">' + esc(o.code) + '</span>' + (withTitle === false ? '' : ' ' + esc(o.title)) + '</a>';
   }
-  function kpi(label, value, sub, tone) {
-    return '<div class="kpi' + (tone ? ' kpi-' + tone : '') + '"><div class="kpi-label">' + esc(label) + '</div><div class="kpi-value">' + value + '</div>' +
-      (sub ? '<div class="kpi-sub">' + sub + '</div>' : '') + '</div>';
+  function kpi(labelText, value, sub, tone) {
+    return '<div class="kpi' + (tone ? ' kpi-' + tone : '') + '"><div class="kpi-label">' + esc(labelText) + '</div><div class="kpi-value">' + value + '</div>' + (sub ? '<div class="kpi-sub">' + sub + '</div>' : '') + '</div>';
   }
   function breadcrumb(o, rootLabel, rootHref) {
-    var items = ['<li><a href="' + (rootHref || 'explorer.html') + '">' + esc(rootLabel || 'OKR Explorer') + '</a></li>'];
-    O.ancestors(o).forEach(function (a) { items.push('<li><a href="okr.html?id=' + encodeURIComponent(a.id) + '" title="' + esc(a.title) + '">' + esc(a.code) + '</a></li>'); });
+    var items = ['<li><a href="' + (rootHref || 'explorer.html') + '">' + esc(rootLabel || 'Goals & OKRs') + '</a></li>'];
+    O.ancestors(o).forEach(function (a) { if (O.can.view(a)) items.push('<li><a href="okr.html?id=' + encodeURIComponent(a.id) + '" title="' + esc(a.title) + '">' + esc(a.code) + '</a></li>'); });
     items.push('<li><span aria-current="page">' + esc(o.code) + '</span></li>');
     return '<nav aria-label="Breadcrumb"><ol class="breadcrumb">' + items.join('') + '</ol></nav>';
   }
   function pageHeader(opts) {
-    return '<div class="page-header">' + (opts.before || '') +
-      '<div class="page-header-row"><div><h1>' + esc(opts.title) + '</h1>' + (opts.subtitle ? '<p class="subtitle">' + opts.subtitle + '</p>' : '') + '</div>' +
+    return '<div class="page-header">' + (opts.before || '') + '<div class="page-header-row"><div><h1>' + esc(opts.title) + '</h1>' + (opts.subtitle ? '<p class="subtitle">' + opts.subtitle + '</p>' : '') + '</div>' +
       (opts.actions ? '<div class="actions">' + opts.actions + '</div>' : '') + '</div></div>';
   }
   function empty(msg) { return '<div class="empty">' + msg + '</div>'; }
   function selectOptions(list, selected, placeholder) {
     var out = placeholder !== undefined ? '<option value="">' + esc(placeholder) + '</option>' : '';
+    var sel = Array.isArray(selected) ? selected.map(String) : [String(selected)];
     return out + list.map(function (x) {
       var v = typeof x === 'string' ? x : x.value;
       var l = typeof x === 'string' ? x : x.label;
-      return '<option value="' + esc(v) + '"' + (String(v) === String(selected) ? ' selected' : '') + '>' + esc(l) + '</option>';
+      return '<option value="' + esc(v) + '"' + (sel.indexOf(String(v)) >= 0 ? ' selected' : '') + '>' + esc(l) + '</option>';
     }).join('');
   }
+  function tabButton(key, labelText, count) {
+    return '<button type="button" role="tab" id="tab-' + key + '" data-tab="' + key + '" aria-controls="panel-' + key + '">' + labelText + (count !== undefined ? '<span class="tab-count">' + count + '</span>' : '') + '</button>';
+  }
+  function tabPanel(key, html) { return '<div role="tabpanel" id="panel-' + key + '" data-panel="' + key + '" aria-labelledby="tab-' + key + '">' + (html || '') + '</div>'; }
 
   // ---------------------------------------------------------------- charts
   function chartCard(opts) {
@@ -120,24 +148,19 @@
     return '<section class="card chart-card" aria-labelledby="' + id + '-t">' +
       '<div class="card-head"><div><h2 class="card-title" id="' + id + '-t">' + esc(opts.title) + '</h2>' + (opts.desc ? '<p class="card-desc">' + esc(opts.desc) + '</p>' : '') + '</div>' +
       (opts.table ? '<button type="button" class="btn btn-subtle btn-sm" data-toggle-table="' + id + '" aria-pressed="false">' + icon('table') + '<span>Show table</span></button>' : '') + '</div>' +
-      '<div id="' + id + '-chart">' + opts.chart + '</div>' +
-      (opts.table ? '<div id="' + id + '-table" hidden>' + opts.table + '</div>' : '') + '</section>';
+      '<div id="' + id + '-chart">' + opts.chart + '</div>' + (opts.table ? '<div id="' + id + '-table" hidden>' + opts.table + '</div>' : '') + '</section>';
   }
   function simpleTable(headers, rows, caption) {
     return '<div class="table-wrap"><table class="data">' + (caption ? '<caption class="sr-only">' + esc(caption) + '</caption>' : '') +
       '<thead><tr>' + headers.map(function (h, i) { return '<th scope="col"' + (i ? ' class="num"' : '') + '>' + esc(h) + '</th>'; }).join('') + '</tr></thead><tbody>' +
-      rows.map(function (r) { return '<tr>' + r.map(function (c, i) { return i ? '<td class="num">' + c + '</td>' : '<th scope="row">' + c + '</th>'; }).join('') + '</tr>'; }).join('') +
-      '</tbody></table></div>';
+      rows.map(function (r) { return '<tr>' + r.map(function (c, i) { return i ? '<td class="num">' + c + '</td>' : '<th scope="row">' + c + '</th>'; }).join('') + '</tr>'; }).join('') + '</tbody></table></div>';
   }
-
-  /** Donut of counts by status. rows: [{status, value}] */
   function statusDonut(counts, centerLabel) {
     var rows = O.STATUSES.map(function (s) { return { status: s, value: counts[s] || 0 }; });
     var total = rows.reduce(function (s, r) { return s + r.value; }, 0);
     var r = 64, c = 2 * Math.PI * r, gap = total > 1 ? 3 : 0, offset = 0;
     var arcs = rows.filter(function (x) { return x.value > 0; }).map(function (x) {
-      var len = (x.value / total) * c;
-      var st = O.STATUS[x.status];
+      var len = (x.value / total) * c, st = O.STATUS[x.status];
       var tip = st.label + ': ' + x.value + ' (' + Math.round((x.value / total) * 100) + '%)';
       var seg = '<circle cx="90" cy="90" r="' + r + '" fill="none" stroke="' + st.color + '" stroke-width="22" stroke-dasharray="' + Math.max(len - gap, 0.5) + ' ' + (c - Math.max(len - gap, 0.5)) + '" stroke-dashoffset="' + (-offset) + '" transform="rotate(-90 90 90)" data-tip="' + esc(tip) + '"/>';
       offset += len;
@@ -145,63 +168,47 @@
     }).join('');
     var legend = rows.map(function (x) {
       var st = O.STATUS[x.status];
-      return '<li><span class="swatch" style="background:' + st.color + '" aria-hidden="true"></span><span class="glyph" aria-hidden="true" style="color:' + st.color + '">' + st.glyph + '</span>' +
-        '<span class="legend-label">' + esc(st.label) + '</span><span class="legend-val">' + x.value + '</span></li>';
+      return '<li><span class="swatch" style="background:' + st.color + '" aria-hidden="true"></span><span class="glyph" aria-hidden="true" style="color:' + st.color + '">' + st.glyph + '</span><span class="legend-label">' + esc(st.label) + '</span><span class="legend-val">' + x.value + '</span></li>';
     }).join('');
     return '<div class="donut-wrap"><svg class="donut" viewBox="0 0 180 180" role="img" aria-label="' + esc(rows.map(function (x) { return O.STATUS[x.status].label + ' ' + x.value; }).join(', ')) + '">' +
       '<circle cx="90" cy="90" r="' + r + '" fill="none" stroke="var(--surface-2)" stroke-width="22"/>' + arcs +
-      '<text x="90" y="88" text-anchor="middle" class="donut-total">' + total + '</text><text x="90" y="108" text-anchor="middle" class="donut-label">' + esc(centerLabel || 'items') + '</text></svg>' +
-      '<ul class="legend">' + legend + '</ul></div>';
+      '<text x="90" y="88" text-anchor="middle" class="donut-total">' + total + '</text><text x="90" y="108" text-anchor="middle" class="donut-label">' + esc(centerLabel || 'items') + '</text></svg><ul class="legend">' + legend + '</ul></div>';
   }
   function statusTable(counts) {
     var total = O.STATUSES.reduce(function (s, k) { return s + (counts[k] || 0); }, 0) || 1;
     return simpleTable(['Status', 'Items', 'Share'], O.STATUSES.map(function (s) { return [esc(O.STATUS[s].label), counts[s] || 0, Math.round(((counts[s] || 0) / total) * 100) + '%']; }), 'Items by status');
   }
-
-  /** Horizontal bars (0-100 by default). rows: [{label, value, status?, tip?, href?, sub?}] */
   function hbars(rows, opts) {
     opts = opts || {};
     var max = opts.max || 100;
     return '<ul class="hbars">' + rows.map(function (r) {
       var w = Math.max(0, Math.min(100, (r.value / max) * 100));
-      var label = r.href ? '<a href="' + esc(r.href) + '">' + esc(r.label) + '</a>' : esc(r.label);
-      return '<li data-tip="' + esc(r.tip || (r.label + ': ' + (opts.fmt ? opts.fmt(r.value) : Math.round(r.value) + '%'))) + '">' +
-        '<span class="hbar-label">' + label + (r.sub ? '<span class="hbar-sub">' + esc(r.sub) + '</span>' : '') + '</span>' +
-        '<span class="hbar-track"><span class="hbar-fill fill-' + esc(r.status || 'brand') + '" style="inline-size:' + w + '%"></span></span>' +
-        '<span class="hbar-val">' + (opts.fmt ? opts.fmt(r.value) : Math.round(r.value) + '%') + '</span></li>';
+      var lab = r.href ? '<a href="' + esc(r.href) + '">' + esc(r.label) + '</a>' : esc(r.label);
+      return '<li data-tip="' + esc(r.tip || (r.label + ': ' + (opts.fmt ? opts.fmt(r.value) : Math.round(r.value) + '%'))) + '"><span class="hbar-label">' + lab + (r.sub ? '<span class="hbar-sub">' + esc(r.sub) + '</span>' : '') + '</span>' +
+        '<span class="hbar-track"><span class="hbar-fill fill-' + esc(r.status || 'brand') + '" style="inline-size:' + w + '%"></span></span><span class="hbar-val">' + (opts.fmt ? opts.fmt(r.value) : Math.round(r.value) + '%') + '</span></li>';
     }).join('') + '</ul>';
   }
-
-  /** Vertical bars for counts over time. rows: [{label, value}] */
   function vbars(rows, unit) {
     var W = 560, H = 200, padL = 30, padB = 26, padT = 18;
     var max = Math.max.apply(null, rows.map(function (r) { return r.value; }).concat([1]));
     var niceMax = Math.ceil(max / 10) * 10;
     var bw = (W - padL) / rows.length;
     var y = function (v) { return H - padB - (v / niceMax) * (H - padB - padT); };
-    var grid = [0, niceMax / 2, niceMax].map(function (g) {
-      return '<line x1="' + padL + '" x2="' + W + '" y1="' + y(g) + '" y2="' + y(g) + '" class="grid"/><text x="' + (padL - 6) + '" y="' + (y(g) + 4) + '" text-anchor="end" class="axis">' + g + '</text>';
-    }).join('');
+    var grid = [0, niceMax / 2, niceMax].map(function (g) { return '<line x1="' + padL + '" x2="' + W + '" y1="' + y(g) + '" y2="' + y(g) + '" class="grid"/><text x="' + (padL - 6) + '" y="' + (y(g) + 4) + '" text-anchor="end" class="axis">' + g + '</text>'; }).join('');
     var peak = rows.reduce(function (m, r, i) { return r.value > rows[m].value ? i : m; }, 0);
     var bars = rows.map(function (r, i) {
-      var x = padL + i * bw + 4;
-      var h = H - padB - y(r.value);
-      var w = Math.max(bw - 8, 4);
+      var x = padL + i * bw + 4, h = H - padB - y(r.value), w = Math.max(bw - 8, 4);
       var path = h > 0 ? roundedTopBar(x, y(r.value), w, h, Math.min(4, w / 2, h)) : '';
       var showVal = i === peak || i === rows.length - 1;
-      return '<g data-tip="' + esc('Week from ' + r.label + ': ' + r.value + ' ' + (unit || '')) + '"><rect x="' + (padL + i * bw) + '" y="' + padT + '" width="' + bw + '" height="' + (H - padB - padT) + '" fill="transparent"/>' +
-        (path ? '<path d="' + path + '" class="bar"/>' : '') +
+      return '<g data-tip="' + esc('Week from ' + r.label + ': ' + r.value + ' ' + (unit || '')) + '"><rect x="' + (padL + i * bw) + '" y="' + padT + '" width="' + bw + '" height="' + (H - padB - padT) + '" fill="transparent"/>' + (path ? '<path d="' + path + '" class="bar"/>' : '') +
         (showVal ? '<text x="' + (x + w / 2) + '" y="' + (y(r.value) - 5) + '" text-anchor="middle" class="val">' + r.value + '</text>' : '') +
         (i % 2 === 0 || i === rows.length - 1 ? '<text x="' + (x + w / 2) + '" y="' + (H - 8) + '" text-anchor="middle" class="axis">' + esc(r.label) + '</text>' : '') + '</g>';
     }).join('');
-    return '<svg class="chart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="' + esc(rows.map(function (r) { return r.label + ': ' + r.value; }).join('; ')) + '">' + grid + bars +
-      '<line x1="' + padL + '" x2="' + W + '" y1="' + (H - padB) + '" y2="' + (H - padB) + '" class="baseline"/></svg>';
+    return '<svg class="chart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="' + esc(rows.map(function (r) { return r.label + ': ' + r.value; }).join('; ')) + '">' + grid + bars + '<line x1="' + padL + '" x2="' + W + '" y1="' + (H - padB) + '" y2="' + (H - padB) + '" class="baseline"/></svg>';
   }
   function roundedTopBar(x, y, w, h, r) {
     return 'M' + x + ',' + (y + h) + 'V' + (y + r) + 'Q' + x + ',' + y + ' ' + (x + r) + ',' + y + 'H' + (x + w - r) + 'Q' + (x + w) + ',' + y + ' ' + (x + w) + ',' + (y + r) + 'V' + (y + h) + 'Z';
   }
-
-  /** Progress over time (0-100) with a dashed "expected" line. points: [{date, value, tip}] */
   function progressLine(points, o) {
     var W = 600, H = 220, padL = 36, padR = 12, padB = 26, padT = 12;
     var t0 = new Date(o.startDate + 'T00:00:00Z').getTime();
@@ -209,26 +216,23 @@
     if (points.length) t0 = Math.min(t0, new Date(points[0].date).getTime());
     var x = function (t) { return padL + ((t - t0) / (t1 - t0)) * (W - padL - padR); };
     var y = function (v) { return H - padB - (v / 100) * (H - padB - padT); };
-    var grid = [0, 25, 50, 75, 100].map(function (g) {
-      return '<line x1="' + padL + '" x2="' + (W - padR) + '" y1="' + y(g) + '" y2="' + y(g) + '" class="grid"/><text x="' + (padL - 6) + '" y="' + (y(g) + 4) + '" text-anchor="end" class="axis">' + g + '%</text>';
-    }).join('');
+    var grid = [0, 25, 50, 75, 100].map(function (g) { return '<line x1="' + padL + '" x2="' + (W - padR) + '" y1="' + y(g) + '" y2="' + y(g) + '" class="grid"/><text x="' + (padL - 6) + '" y="' + (y(g) + 4) + '" text-anchor="end" class="axis">' + g + '%</text>'; }).join('');
     var months = '';
     var start = new Date(t0);
     for (var m = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 1)); m.getTime() < t1; m = new Date(Date.UTC(m.getUTCFullYear(), m.getUTCMonth() + 2, 1))) {
       months += '<text x="' + x(m.getTime()) + '" y="' + (H - 8) + '" text-anchor="middle" class="axis">' + O.fmtShort(m.toISOString()).replace(/^\d+\s/, '') + '</text>';
     }
     var asOfX = x(Math.min(O.asOf.getTime(), t1));
-    var expected = '<line x1="' + x(new Date(o.startDate + 'T00:00:00Z').getTime()) + '" y1="' + y(0) + '" x2="' + x(t1) + '" y2="' + y(100) + '" class="expected"/>';
-    var today = '<line x1="' + asOfX + '" x2="' + asOfX + '" y1="' + padT + '" y2="' + (H - padB) + '" class="today"/><text x="' + (asOfX - 4) + '" y="' + (padT + 10) + '" text-anchor="end" class="axis">Today</text>';
+    var stay = O.isStay(o);
+    var expected = stay ? '<line x1="' + padL + '" y1="' + y(100) + '" x2="' + (W - padR) + '" y2="' + y(100) + '" class="expected"/>' : '<line x1="' + x(new Date(o.startDate + 'T00:00:00Z').getTime()) + '" y1="' + y(0) + '" x2="' + x(t1) + '" y2="' + y(100) + '" class="expected"/>';
+    var today = O.asOf.getTime() <= t1 ? '<line x1="' + asOfX + '" x2="' + asOfX + '" y1="' + padT + '" y2="' + (H - padB) + '" class="today"/><text x="' + (asOfX - 4) + '" y="' + (padT + 10) + '" text-anchor="end" class="axis">Today</text>' : '';
     var path = points.map(function (p, i) { return (i ? 'L' : 'M') + x(new Date(p.date).getTime()).toFixed(1) + ',' + y(p.value).toFixed(1); }).join('');
-    var dots = points.map(function (p) {
-      return '<circle cx="' + x(new Date(p.date).getTime()).toFixed(1) + '" cy="' + y(p.value).toFixed(1) + '" r="4.5" class="dot fill-' + esc(p.status || 'OnTrack') + '" data-tip="' + esc(p.tip) + '"/>';
-    }).join('');
+    var dots = points.map(function (p) { return '<circle cx="' + x(new Date(p.date).getTime()).toFixed(1) + '" cy="' + y(p.value).toFixed(1) + '" r="4.5" class="dot fill-' + esc(p.status || 'OnTrack') + '" data-tip="' + esc(p.tip) + '"/>'; }).join('');
     var last = points[points.length - 1];
     var lastLabel = last ? '<text x="' + (x(new Date(last.date).getTime()) + 8) + '" y="' + (y(last.value) - 8) + '" class="val">' + Math.round(last.value) + '%</text>' : '';
     return '<svg class="chart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Progress over time for ' + esc(o.code) + '">' + grid + months + expected + today +
       '<path d="' + path + '" class="line"/>' + dots + lastLabel + '<line x1="' + padL + '" x2="' + (W - padR) + '" y1="' + y(0) + '" y2="' + y(0) + '" class="baseline"/></svg>' +
-      '<p class="chart-key"><span class="key-line"></span> Actual progress <span class="key-dash"></span> Expected (linear to due date)</p>';
+      '<p class="chart-key"><span class="key-line"></span> ' + (stay ? 'Share of threshold reached (100% = threshold met)' : 'Actual progress') + ' <span class="key-dash"></span> ' + (stay ? 'Threshold' : 'Expected (linear to due date)') + '</p>';
   }
 
   // ---------------------------------------------------------------- tooltip, toasts, dialogs, tabs
@@ -247,8 +251,7 @@
     });
     document.addEventListener('mousemove', function (e) {
       if (tipEl.hidden) return;
-      var x = e.clientX + 14, y = e.clientY + 14;
-      var r = tipEl.getBoundingClientRect();
+      var x = e.clientX + 14, y = e.clientY + 14, r = tipEl.getBoundingClientRect();
       if (x + r.width > window.innerWidth - 8) x = e.clientX - r.width - 14;
       if (y + r.height > window.innerHeight - 8) y = e.clientY - r.height - 14;
       tipEl.style.left = x + 'px';
@@ -256,7 +259,6 @@
     });
     document.addEventListener('mouseleave', function () { tipEl.hidden = true; });
   }
-
   function toast(message, kind, detail) {
     var host = document.getElementById('toasts');
     if (!host) return;
@@ -267,7 +269,6 @@
     setTimeout(function () { el.classList.add('out'); }, 4200);
     setTimeout(function () { el.remove(); }, 4700);
   }
-  /** Show a toast on the next page (used when an action ends in a redirect). */
   function flash(message, kind, detail) {
     try { sessionStorage.setItem('okrDemo.flash', JSON.stringify({ message: message, kind: kind, detail: detail })); } catch (e) { /* ignore */ }
   }
@@ -280,32 +281,24 @@
       toast(f.message, f.kind, f.detail);
     } catch (e) { /* ignore */ }
   }
-
-  /**
-   * Modal dialog built on the native <dialog> element (focus trap and Esc come for free).
-   * opts: {title, body (html), okLabel, okClass, cancelLabel, onOk(dialogEl) -> false keeps it open}
-   */
+  /** Modal dialog on the native <dialog> element. opts: {title, body, okLabel, okClass, cancelLabel, onOk(dlg) -> false keeps it open, wide} */
   function dialog(opts) {
     var dlg = document.createElement('dialog');
-    dlg.className = 'dialog';
+    dlg.className = 'dialog' + (opts.wide ? ' dialog-wide' : '');
     dlg.setAttribute('aria-labelledby', 'dlg-title');
     dlg.innerHTML = '<form method="dialog" novalidate><h2 id="dlg-title">' + esc(opts.title) + '</h2><div class="dialog-body">' + opts.body + '</div>' +
       '<div class="dialog-actions"><button type="button" class="btn" data-cancel>' + esc(opts.cancelLabel || 'Cancel') + '</button>' +
       (opts.okLabel ? '<button type="submit" class="btn ' + (opts.okClass || 'btn-primary') + '">' + esc(opts.okLabel) + '</button>' : '') + '</div></form>';
     document.body.appendChild(dlg);
-    var close = function () { dlg.close(); };
-    dlg.querySelector('[data-cancel]').addEventListener('click', close);
+    dlg.querySelector('[data-cancel]').addEventListener('click', function () { dlg.close(); });
     dlg.addEventListener('close', function () { dlg.remove(); });
-    dlg.querySelector('form').addEventListener('submit', function (e) {
-      if (opts.onOk && opts.onOk(dlg) === false) e.preventDefault();
-    });
+    dlg.querySelector('form').addEventListener('submit', function (e) { if (opts.onOk && opts.onOk(dlg) === false) e.preventDefault(); });
     dlg.showModal();
     return dlg;
   }
-
-  /** Accessible tabs. root contains [role=tab][data-tab] buttons and [data-panel] sections. */
   function tabs(root, onChange) {
-    var tabEls = Array.prototype.slice.call(root.querySelectorAll('[role="tab"]'));
+    var tabEls = Array.prototype.slice.call(root.querySelectorAll(':scope > .tablist [role="tab"]'));
+    if (!tabEls.length) tabEls = Array.prototype.slice.call(root.querySelectorAll('[role="tab"]'));
     function activate(name, focus, push) {
       tabEls.forEach(function (t) {
         var on = t.getAttribute('data-tab') === name;
@@ -341,18 +334,17 @@
   // ---------------------------------------------------------------- page shell
   var NAV = [
     { key: 'home', href: 'index.html', label: 'Home' },
-    { key: 'explorer', href: 'explorer.html', label: 'OKR Explorer' },
+    { key: 'explorer', href: 'explorer.html', label: 'Goals & OKRs' },
     { key: 'checkin', href: 'checkin.html', label: 'Check-in' },
+    { key: 'meetings', href: 'meetings.html', label: '1:1 meetings' },
+    { key: 'people', href: 'people.html', label: 'People' },
     { key: 'approvals', href: 'approvals.html', label: 'Approvals' },
     { key: 'reports', href: 'reports.html', label: 'Reports' },
     { key: 'notifications', href: 'notifications.html', label: 'Notifications' },
+    { key: 'teams', href: 'teams.html', label: 'Teams & Outlook' },
     { key: 'admin', href: 'admin.html', label: 'Administration' },
   ];
 
-  /**
-   * Render the common layout and return the <main> element for the page's content.
-   * Returns null (after showing a notice) when the current role may not open this screen.
-   */
   function shell(navKey, title) {
     document.title = title + ' · OKR Management System';
     var dirParam = O.param('dir');
@@ -363,17 +355,22 @@
 
     var me = O.currentUser();
     var role = O.prefs.role;
-    var cycle = O.currentCycle();
-    var unread = O.unreadCount();
-    var pending = O.pendingForMe().length;
-    var badges = { notifications: unread, approvals: pending };
+    var cyc = O.currentCycle();
+    var badges = { notifications: O.unreadCount(), approvals: O.pendingForMe().length, meetings: O.myMeetings().filter(function (m) { return m.status === 'Scheduled' && O.daysSince(m.date) <= 0 && O.daysSince(m.date) >= -7; }).length };
 
     var nav = NAV.filter(function (n) { return O.can.nav(n.key); }).map(function (n) {
       var count = badges[n.key] || 0;
       var active = n.key === navKey;
-      return '<li><a href="' + n.href + '" class="nav-link' + (active ? ' active' : '') + '"' + (active ? ' aria-current="page"' : '') +
-        ' title="' + esc(n.label) + '" data-nav="' + n.key + '"' + (count ? ' aria-label="' + esc(n.label + ', ' + count + ' new') + '"' : '') + '>' + icon(n.key) +
-        '<span class="nav-label">' + esc(n.label) + '</span><span class="nav-badge" aria-hidden="true"' + (count ? '' : ' hidden') + '>' + count + '</span></a></li>';
+      return '<li><a href="' + n.href + '" class="nav-link' + (active ? ' active' : '') + '"' + (active ? ' aria-current="page"' : '') + ' title="' + esc(n.label) + '" data-nav="' + n.key + '"' +
+        (count ? ' aria-label="' + esc(n.label + ', ' + count + ' new') + '"' : '') + '>' + icon(n.key) + '<span class="nav-label">' + esc(n.label) + '</span><span class="nav-badge" aria-hidden="true"' + (count ? '' : ' hidden') + '>' + count + '</span></a></li>';
+    }).join('');
+
+    var cycleOptions = O.db.cycles.map(function (c) {
+      return '<optgroup label="' + esc(c.name + ' – ' + c.status) + '">' + O.PERIODS.map(function (p) {
+        var v = c.id + '|' + p;
+        var on = c.id === cyc.id && p === O.prefs.period;
+        return '<option value="' + esc(v) + '"' + (on ? ' selected' : '') + '>' + esc(p === 'FY' ? c.name + ' (full year)' : c.name + ' ' + p) + '</option>';
+      }).join('') + '</optgroup>';
     }).join('');
 
     var app = document.getElementById('app');
@@ -382,12 +379,10 @@
       '<div class="demo-banner" role="note">' + icon('info') + '<span>Demo environment with fictitious data – not an official DEWA system</span></div>' +
       '<header class="topbar">' +
       '<a href="index.html" class="wordmark" aria-label="OKR Management System, Transmission Power – home"><span class="wm-main">OKR Management System</span><span class="wm-divider" aria-hidden="true">|</span><span class="wm-sub">Transmission Power</span></a>' +
-      '<form class="topbar-search" role="search" action="explorer.html" method="get"><label for="global-search" class="sr-only">Search OKRs</label>' + icon('search') +
-      '<input id="global-search" name="q" type="search" placeholder="Search OKRs by title or code" autocomplete="off" value="' + esc(navKey === 'explorer' ? (O.param('q') || '') : '') + '"></form>' +
+      '<form class="topbar-search" role="search" action="explorer.html" method="get"><label for="global-search" class="sr-only">Search goals</label>' + icon('search') +
+      '<input id="global-search" name="q" type="search" placeholder="Search goals by title or code" autocomplete="off" value="' + esc(navKey === 'explorer' ? (O.param('q') || '') : '') + '"><input type="hidden" name="scope" value="all"></form>' +
       '<div class="topbar-controls">' +
-      '<label class="topbar-field"><span>Cycle</span><select id="period-select">' + O.PERIODS.map(function (p) {
-        return '<option value="' + p + '"' + (p === O.prefs.period ? ' selected' : '') + '>' + esc(p === 'FY' ? cycle.name + ' (full year)' : cycle.name + ' ' + p) + '</option>';
-      }).join('') + '</select></label>' +
+      '<label class="topbar-field"><span>Cycle</span><select id="period-select">' + cycleOptions + '</select></label>' +
       '<label class="topbar-field"><span>View as</span><select id="role-select">' + O.ROLES.map(function (r) {
         var u = O.user(O.PERSONAS[r]);
         return '<option value="' + r + '"' + (r === role ? ' selected' : '') + '>' + esc(O.ROLE_LABELS[r] + ' – ' + u.displayName) + '</option>';
@@ -395,21 +390,24 @@
       (O.db.config.ai.enabled ? '<button type="button" class="btn btn-ai" id="ai-open" aria-haspopup="dialog" aria-controls="ai-drawer">' + icon('ai') + '<span>AI Assist</span></button>' : '') +
       '<span class="me" title="' + esc(me.displayName + ' – ' + me.jobTitle) + '">' + avatar(me.id, 32) + '<span class="sr-only">Signed in as ' + esc(me.displayName) + '</span></span>' +
       '</div></header>' +
-      '<div class="app-body">' +
-      '<nav class="navrail" aria-label="Main navigation"><ul>' + nav + '</ul>' +
+      (cyc.status !== 'Active' ? '<div class="cycle-banner" role="note">' + icon('info') + '<span>You are viewing <strong>' + esc(cyc.name) + '</strong>, which is ' + esc(cyc.status.toLowerCase()) + (cyc.status === 'Closed' ? ' – goals are read-only.' : ' – plan goals here before the cycle starts.') + '</span></div>' : '') +
+      '<div class="app-body"><nav class="navrail" aria-label="Main navigation"><ul>' + nav + '</ul>' +
       '<div class="nav-who"><span class="nav-who-label">Signed in as</span><strong>' + esc(me.displayName) + '</strong><span>' + esc(O.ROLE_LABELS[role]) + '</span></div></nav>' +
       '<main id="main" class="main" tabindex="-1"></main></div>' +
-      '<footer class="footer"><span>Demo by Ducont – sample data only</span><span>Data as of ' + O.fmtDate(O.asOf.toISOString()) + ' · Fictitious names and figures · ' +
-      '<button type="button" class="linklike" id="reset-demo">Reset demo data</button></span></footer>' +
+      '<footer class="footer"><span>Demo by Ducont – sample data only</span><span>Data as of ' + O.fmtDate(O.asOf.toISOString()) + ' · Fictitious names and figures · <button type="button" class="linklike" id="reset-demo">Reset demo data</button></span></footer>' +
       '<div id="toasts" class="toasts" aria-live="polite" aria-atomic="false"></div>';
 
     document.getElementById('role-select').addEventListener('change', function (e) {
       O.setPref('role', e.target.value);
+      var url = new URL(window.location.href);
+      url.searchParams.delete('as');
       if (navKey && !O.can.nav(navKey, e.target.value)) window.location.href = 'index.html';
-      else window.location.reload();
+      else window.location.href = url.toString();
     });
     document.getElementById('period-select').addEventListener('change', function (e) {
-      O.setPref('period', e.target.value);
+      var parts = e.target.value.split('|');
+      O.setPref('cycleId', parts[0]);
+      O.setPref('period', parts[1]);
       window.location.reload();
     });
     document.getElementById('reset-demo').addEventListener('click', confirmReset);
@@ -420,50 +418,39 @@
 
     var main = document.getElementById('main');
     if (navKey && !O.can.nav(navKey)) {
-      main.innerHTML = pageHeader({ title: title }) +
-        '<div class="msg msg-warning" role="status"><strong>Not available for your role.</strong> The ' + esc(O.ROLE_LABELS[role]) +
+      main.innerHTML = pageHeader({ title: title }) + '<div class="msg msg-warning" role="status"><strong>Not available for your role.</strong> The ' + esc(O.ROLE_LABELS[role]) +
         ' role cannot open this screen. Switch role with “View as” at the top, or go back to <a href="index.html">Home</a>.</div>';
       return null;
     }
     return main;
   }
 
-  /** Update the unread / pending counters in the navigation after an action on the same page. */
   function refreshNav() {
     var counts = { notifications: O.unreadCount(), approvals: O.pendingForMe().length };
     Object.keys(counts).forEach(function (key) {
       var link = document.querySelector('[data-nav="' + key + '"]');
       if (!link) return;
       var badge = link.querySelector('.nav-badge');
-      var label = link.getAttribute('title');
+      var lab = link.getAttribute('title');
       badge.textContent = counts[key];
       badge.hidden = !counts[key];
-      if (counts[key]) link.setAttribute('aria-label', label + ', ' + counts[key] + ' new');
-      else link.removeAttribute('aria-label');
+      if (counts[key]) link.setAttribute('aria-label', lab + ', ' + counts[key] + ' new'); else link.removeAttribute('aria-label');
     });
   }
-
   function confirmReset() {
     dialog({
       title: 'Reset demo data?',
-      body: '<p>This removes every change made in this browser (check-ins, approvals, new items, settings) and restores the original sample data.</p>',
-      okLabel: 'Reset',
-      okClass: 'btn-danger',
-      onOk: function () {
-        O.resetDemo();
-        flash('Demo data reset', 'success', 'The original sample data has been restored.');
-        window.location.href = 'index.html';
-      },
+      body: '<p>This removes every change made in this browser (check-ins, approvals, new goals, meetings, settings) and restores the original sample data.</p>',
+      okLabel: 'Reset', okClass: 'btn-danger',
+      onOk: function () { O.resetDemo(); flash('Demo data reset', 'success', 'The original sample data has been restored.'); window.location.href = 'index.html'; },
     });
   }
-
   function initTableToggles() {
     document.addEventListener('click', function (e) {
       var b = e.target.closest && e.target.closest('[data-toggle-table]');
       if (!b) return;
       var id = b.getAttribute('data-toggle-table');
-      var table = document.getElementById(id + '-table');
-      var chart = document.getElementById(id + '-chart');
+      var table = document.getElementById(id + '-table'), chart = document.getElementById(id + '-chart');
       var showTable = table.hidden;
       table.hidden = !showTable;
       chart.hidden = showTable;
@@ -472,9 +459,29 @@
     });
   }
 
+  /** Renders the AI agent insights (used on Home, in the drawer and in the Teams preview). */
+  function insightsHtml(ins, max) {
+    var block = function (key, title, tone) {
+      var list = ins[key];
+      if (!list.length) return '';
+      return '<div class="insight insight-' + tone + '"><h4>' + esc(title) + ' <span class="tab-count">' + list.length + '</span></h4><ul>' + list.slice(0, max || 4).map(function (x) {
+        return '<li>' + okrLink(x.okr) + '<div class="small muted">' + esc(x.detail) + '</div></li>';
+      }).join('') + (list.length > (max || 4) ? '<li class="small muted">+' + (list.length - (max || 4)) + ' more</li>' : '') + '</ul></div>';
+    };
+    return '<p class="insight-headline">' + esc(ins.headline) + '</p><div class="insight-grid">' + block('drifting', 'Drifting off track', 'bad') + block('stalled', 'Stalled', 'warn') + block('deadlines', 'Deadlines in the next 3 weeks', 'info') + block('wins', 'Wins', 'good') + '</div>';
+  }
+
   // ---------------------------------------------------------------- AI Assist drawer
   var aiContext = {};
   function setAiContext(ctx) { aiContext = ctx || {}; }
+  function openAi(ctx) {
+    if (ctx) setAiContext(ctx);
+    var b = document.getElementById('ai-open');
+    var drawer = document.getElementById('ai-drawer');
+    if (!b || !drawer) return;
+    if (!drawer.hidden) b.click();
+    b.click();
+  }
 
   function initAi() {
     var openBtn = document.getElementById('ai-open');
@@ -487,26 +494,24 @@
     drawer.setAttribute('aria-labelledby', 'ai-title');
     drawer.hidden = true;
     var okrOptions = function (levels) {
-      return O.cycleOkrs().filter(function (o) { return levels.indexOf(o.level) >= 0; }).map(function (o) {
-        return { value: o.id, label: o.code + ' – ' + (o.title.length > 60 ? o.title.slice(0, 60) + '…' : o.title) };
-      });
+      return O.cycleOkrs().filter(function (o) { return levels.indexOf(o.level) >= 0; }).map(function (o) { return { value: o.id, label: o.code + ' – ' + (o.title.length > 60 ? o.title.slice(0, 60) + '…' : o.title) }; });
     };
     var featureList = [
-      { key: 'draftObjective', label: 'Draft an objective' },
+      { key: 'draftObjective', label: 'Draft an objective with key results' },
       { key: 'suggestKeyResults', label: 'Suggest key results' },
       { key: 'summariseCheckIns', label: 'Summarise check-ins' },
+      { key: 'agentDigest', label: 'Weekly digest (AI agent)' },
     ].filter(function (f) { return feats[f.key]; });
 
     drawer.innerHTML =
       '<div class="drawer-head"><h2 id="ai-title">' + icon('ai') + ' AI Assist</h2><button type="button" class="btn btn-icon" id="ai-close" aria-label="Close AI Assist">' + icon('close') + '</button></div>' +
-      '<p class="msg msg-info small">Demo: suggestions are pre-written examples. No data leaves your browser and nothing is saved until you choose to use a suggestion.</p>' +
+      '<p class="msg msg-info small">Demo: suggestions are pre-written examples and rule-based insights. No data leaves your browser and nothing is saved until you choose to use a suggestion.</p>' +
       (featureList.length ? '<form id="ai-form" class="stack">' +
         '<label class="field"><span class="field-label">What do you need?</span><select id="ai-feature">' + selectOptions(featureList.map(function (f) { return { value: f.key, label: f.label }; })) + '</select></label>' +
         '<label class="field" data-ai-for="draftObjective"><span class="field-label">Topic or rough idea (optional)</span><input id="ai-topic" type="text" placeholder="e.g. faster fault restoration"></label>' +
         '<label class="field" data-ai-for="suggestKeyResults"><span class="field-label">Objective</span><select id="ai-objective">' + selectOptions(okrOptions(['Objective'])) + '</select></label>' +
-        '<label class="field" data-ai-for="summariseCheckIns"><span class="field-label">Item</span><select id="ai-item">' + selectOptions(okrOptions(['Objective', 'KeyResult', 'Initiative', 'ActionItem'])) + '</select></label>' +
-        '<button type="submit" class="btn btn-primary">' + icon('ai') + '<span>Generate</span></button></form>' +
-        '<div id="ai-results" class="stack" aria-live="polite"></div>'
+        '<label class="field" data-ai-for="summariseCheckIns"><span class="field-label">Goal</span><select id="ai-item">' + selectOptions(okrOptions(['Objective', 'KeyResult', 'Initiative', 'ActionItem', 'Personal'])) + '</select></label>' +
+        '<button type="submit" class="btn btn-primary">' + icon('ai') + '<span>Generate</span></button></form><div id="ai-results" class="stack" aria-live="polite"></div>'
         : '<p class="empty">All AI Assist features are turned off in Administration.</p>');
     document.body.appendChild(drawer);
 
@@ -519,21 +524,17 @@
       if (featureSel && aiContext.feature && feats[aiContext.feature]) featureSel.value = aiContext.feature;
       if (aiContext.okrId) {
         var o = O.okr(aiContext.okrId);
-        var objSel = drawer.querySelector('#ai-objective');
-        var itemSel = drawer.querySelector('#ai-item');
+        var objSel = drawer.querySelector('#ai-objective'), itemSel = drawer.querySelector('#ai-item');
         if (o && objSel && o.level === 'Objective') objSel.value = o.id;
         if (o && itemSel && o.level !== 'Goal') itemSel.value = o.id;
       }
+      if (aiContext.topic !== undefined && drawer.querySelector('#ai-topic')) drawer.querySelector('#ai-topic').value = aiContext.topic;
       syncFields();
       drawer.hidden = false;
       openBtn.setAttribute('aria-expanded', 'true');
       drawer.querySelector('#ai-close').focus();
     }
-    function close() {
-      drawer.hidden = true;
-      openBtn.setAttribute('aria-expanded', 'false');
-      openBtn.focus();
-    }
+    function close() { drawer.hidden = true; openBtn.setAttribute('aria-expanded', 'false'); openBtn.focus(); }
     openBtn.setAttribute('aria-expanded', 'false');
     openBtn.addEventListener('click', function () { if (drawer.hidden) open(); else close(); });
     drawer.querySelector('#ai-close').addEventListener('click', close);
@@ -546,32 +547,47 @@
     form.addEventListener('submit', function (e) {
       e.preventDefault();
       var feature = featureSel.value;
-      var ctx = {
-        topic: drawer.querySelector('#ai-topic').value,
-        okrId: feature === 'suggestKeyResults' ? drawer.querySelector('#ai-objective').value : drawer.querySelector('#ai-item').value,
-      };
+      var ctx = { topic: drawer.querySelector('#ai-topic').value, okrId: feature === 'suggestKeyResults' ? drawer.querySelector('#ai-objective').value : drawer.querySelector('#ai-item').value };
       var out = drawer.querySelector('#ai-results');
       out.innerHTML = '<p class="muted"><span class="spinner" aria-hidden="true"></span> Thinking…</p>';
-      O.aiSuggest(feature, ctx).then(function (list) {
+      O.aiSuggest(feature === 'agentDigest' ? 'digest' : feature, ctx).then(function (list) {
+        if (feature === 'agentDigest') {
+          out.innerHTML = '<h3 class="section-title">' + esc(list[0].title) + '</h3>' + insightsHtml(list[0].insights, 3);
+          return;
+        }
         out.innerHTML = '<h3 class="section-title">Suggestions</h3>' + list.map(function (s, i) {
-          var action = '';
-          var f = s.fields || {};
+          var action = '', f = s.fields || {};
           if (feature === 'draftObjective' && O.can.create('Objective')) {
-            action = '<a class="btn btn-sm" href="okr-edit.html?level=Objective&title=' + encodeURIComponent(f.title) + '&description=' + encodeURIComponent(f.description) + '">Use in a new objective</a>';
+            action = '<a class="btn btn-sm" href="okr-edit.html?level=Objective&title=' + encodeURIComponent(f.title) + '&description=' + encodeURIComponent(f.description) + '">Edit as new objective</a>' +
+              '<button type="button" class="btn btn-sm btn-primary" data-create-all="' + i + '">Create objective + ' + s.krs.length + ' key results</button>';
           } else if (feature === 'suggestKeyResults' && O.can.create('KeyResult')) {
-            action = '<a class="btn btn-sm" href="okr-edit.html?level=KeyResult&parent=' + encodeURIComponent(ctx.okrId) + '&title=' + encodeURIComponent(f.title) +
-              '&measurementType=' + encodeURIComponent(f.measurementType) + '&baseline=' + f.baseline + '&target=' + f.target + '&unit=' + encodeURIComponent(f.unit) + '">Create this key result</a>';
+            action = '<a class="btn btn-sm" href="okr-edit.html?level=KeyResult&parent=' + encodeURIComponent(ctx.okrId) + '&title=' + encodeURIComponent(f.title) + '&measurementType=' + encodeURIComponent(f.measurementType) + '&baseline=' + f.baseline + '&target=' + f.target + '&unit=' + encodeURIComponent(f.unit) + '">Create this key result</a>';
           }
-          return '<article class="ai-card"><h4>' + esc(s.title) + '</h4><p>' + esc(f.description || s.body) + '</p>' + (f.description ? '<p class="small muted">' + esc(s.body) + '</p>' : '') +
+          var krs = s.krs ? '<ul class="ai-krs">' + s.krs.map(function (k) { return '<li>' + esc(k.title) + ' <span class="small muted">(' + esc(O.MEASUREMENT_LABELS[k.measurementType]) + ')</span></li>'; }).join('') + '</ul>' : '';
+          return '<article class="ai-card"><h4>' + esc(s.title) + '</h4><p>' + esc(f.description || s.body) + '</p>' + krs + (f.description ? '<p class="small muted">' + esc(s.body) + '</p>' : '') +
             '<div class="row">' + action + '<button type="button" class="btn btn-sm btn-subtle" data-copy="' + i + '">Copy text</button></div></article>';
         }).join('');
         out.querySelectorAll('[data-copy]').forEach(function (b) {
           b.addEventListener('click', function () {
             var s = list[Number(b.getAttribute('data-copy'))];
-            var text = s.title + '\n' + ((s.fields && s.fields.description) || s.body);
+            var text = s.title + '\n' + ((s.fields && s.fields.description) || s.body) + (s.krs ? '\n' + s.krs.map(function (k) { return '- ' + k.title; }).join('\n') : '');
             var done = function () { toast('Copied to clipboard', 'success'); };
             if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(text).then(done, function () { toast('Copy is not available here', 'error'); });
             else toast('Copy is not available here', 'error', 'Select the text and press Ctrl+C instead.');
+          });
+        });
+        out.querySelectorAll('[data-create-all]').forEach(function (b) {
+          b.addEventListener('click', function () {
+            var s = list[Number(b.getAttribute('data-create-all'))];
+            var me = O.currentUser();
+            var cyc = O.currentCycle();
+            var goal = O.cycleOkrs().filter(function (o) { return o.level === 'Goal'; })[0];
+            var created = O.createObjectiveWithKrs({
+              level: 'Objective', parentId: goal ? goal.id : null, title: s.fields.title, description: s.fields.description, ownerId: me.id, departmentId: me.departmentId || 'd-om', teamId: null,
+              visibility: 'Public', measurementType: 'RolledUp', unit: '%', baseline: 0, target: 100, weight: 10, startDate: cyc.startDate, dueDate: cyc.endDate, labels: [],
+            }, s.krs);
+            flash(created[0].code + ' created with ' + (created.length - 1) + ' key results', 'success', 'Review the owners, targets and parent goal, then submit for approval.');
+            window.location.href = 'okr.html?id=' + encodeURIComponent(created[0].id) + '&tab=children';
           });
         });
       });
@@ -579,10 +595,11 @@
   }
 
   window.OKR.ui = {
-    icon: icon, statusBadge: statusBadge, levelChip: levelChip, approvalChip: approvalChip, decisionChip: decisionChip,
+    icon: icon, statusBadge: statusBadge, levelChip: levelChip, approvalChip: approvalChip, decisionChip: decisionChip, labelChips: labelChips,
+    visibilityChip: visibilityChip, sourceChip: sourceChip, owners: owners,
     progress: progress, avatar: avatar, person: person, flagChips: flagChips, okrLink: okrLink, kpi: kpi, breadcrumb: breadcrumb,
-    pageHeader: pageHeader, empty: empty, selectOptions: selectOptions,
+    pageHeader: pageHeader, empty: empty, selectOptions: selectOptions, tabButton: tabButton, tabPanel: tabPanel,
     chartCard: chartCard, simpleTable: simpleTable, statusDonut: statusDonut, statusTable: statusTable, hbars: hbars, vbars: vbars, progressLine: progressLine,
-    toast: toast, flash: flash, dialog: dialog, tabs: tabs, shell: shell, setAiContext: setAiContext, refreshNav: refreshNav,
+    insightsHtml: insightsHtml, toast: toast, flash: flash, dialog: dialog, tabs: tabs, shell: shell, setAiContext: setAiContext, openAi: openAi, refreshNav: refreshNav,
   };
 })();
