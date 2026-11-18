@@ -19,37 +19,60 @@
     var main = U.shell('notifications', 'Notifications');
     if (!main) return;
     var me = O.currentUser();
-    var TYPE_LABELS = { Approval: 'Approval', Decision: 'Decision', DueSoon: 'Due soon', Overdue: 'Overdue', Escalation: 'Escalation', Reminder: 'Reminder', Comment: 'Comment', Assignment: 'Assignment', CheckIn: 'Check-in' };
-    var TYPE_CLASS = { Overdue: 'flag-overdue', Escalation: 'flag-overdue', DueSoon: 'flag-due', Reminder: 'flag-stale', Approval: 'flag-appr', Decision: 'dec-Approved' };
+    var $ = function (x) { return document.getElementById(x); };
+    var TYPE_LABELS = { Approval: 'Approval', Decision: 'Decision', DueSoon: 'Due soon', Overdue: 'Overdue', Escalation: 'Escalation', Reminder: 'Reminder', Comment: 'Comment', Assignment: 'Assignment', CheckIn: 'Check-in', Edited: 'Edited', Deleted: 'Deleted', Sync: 'Data sync', Meeting: '1:1 meeting', AIDigest: 'AI digest' };
+    var TYPE_CLASS = { Overdue: 'flag-overdue', Escalation: 'flag-overdue', Deleted: 'flag-overdue', DueSoon: 'flag-due', Sync: 'flag-due', Reminder: 'flag-stale', Approval: 'flag-appr', Meeting: 'flag-appr', Decision: 'dec-Approved', AIDigest: 'dec-Approved' };
     var state = { show: O.param('show') === 'unread' ? 'unread' : 'all', type: '' };
 
-    function render() {
+    main.innerHTML = U.pageHeader({ title: 'Notifications', subtitle: 'For ' + esc(me.displayName) + '. The same notifications are sent to Teams and email according to your preferences.' }) +
+      '<section id="tabs"><div class="tablist" role="tablist" aria-label="Notifications">' + U.tabButton('inbox', 'Inbox', O.unreadCount()) + U.tabButton('prefs', 'My preferences') + '</div>' + U.tabPanel('inbox', '<div id="inbox"></div>') + U.tabPanel('prefs', prefs()) + '</section>';
+    U.tabs($('tabs'));
+
+    function renderInbox() {
       var list = O.myNotifications();
       var types = Object.keys(TYPE_LABELS).filter(function (t) { return list.some(function (n) { return n.type === t; }); });
       var rows = list.filter(function (n) { return (state.show === 'all' || !n.read) && (!state.type || n.type === state.type); });
       var unread = list.filter(function (n) { return !n.read; }).length;
-      main.innerHTML = U.pageHeader({
-        title: 'Notifications',
-        subtitle: 'For ' + esc(me.displayName) + ' · ' + unread + ' unread',
-        actions: '<button type="button" class="btn" id="all-read"' + (unread ? '' : ' disabled') + '>' + U.icon('check') + '<span>Mark all as read</span></button>',
-      }) +
-      '<form class="filters" aria-label="Filter notifications"><fieldset class="field" style="padding:6px 10px"><legend>Show</legend><div class="radio-row">' +
+      $('inbox').innerHTML = '<form class="filters" aria-label="Filter notifications"><fieldset class="field" style="padding:6px 10px"><legend>Show</legend><div class="radio-row">' +
         '<label><input type="radio" name="show" value="all"' + (state.show === 'all' ? ' checked' : '') + '> All (' + list.length + ')</label>' +
         '<label><input type="radio" name="show" value="unread"' + (state.show === 'unread' ? ' checked' : '') + '> Unread (' + unread + ')</label></div></fieldset>' +
-        '<label class="field"><span class="field-label">Type</span><select id="type">' + U.selectOptions(types.map(function (t) { return { value: t, label: TYPE_LABELS[t] }; }), state.type, 'All types') + '</select></label></form>' +
-      (rows.length ? '<div class="card"><ul class="list">' + rows.map(function (n) {
-        var o = O.okr(n.okrId);
-        return '<li class="notif' + (n.read ? '' : ' unread') + '"><span class="chip type-chip ' + (TYPE_CLASS[n.type] || '') + '">' + esc(TYPE_LABELS[n.type] || n.type) + '</span>' +
-          '<div class="list-main"><div class="list-title">' + (n.read ? '' : '<span class="sr-only">Unread: </span>') + esc(n.title) + '</div><div>' + esc(n.message) + '</div>' +
-          '<div class="list-meta">' + O.fmtDateTime(n.createdOn) + ' · ' + O.fmtRelative(n.createdOn) + (o ? ' · <a href="okr.html?id=' + encodeURIComponent(o.id) + '" data-open="' + esc(n.id) + '">Open ' + esc(o.code) + '</a>' : '') + '</div></div>' +
-          '<button type="button" class="btn btn-sm btn-subtle" data-toggle-read="' + esc(n.id) + '">' + (n.read ? 'Mark unread' : 'Mark read') + '</button></li>';
-      }).join('') + '</ul></div>' : U.empty(state.show === 'unread' ? 'You are all caught up.' : 'No notifications.'));
-
-      document.querySelectorAll('input[name="show"]').forEach(function (r) { r.addEventListener('change', function () { state.show = r.value; render(); }); });
-      document.getElementById('type').addEventListener('change', function (e) { state.type = e.target.value; render(); });
-      document.getElementById('all-read').addEventListener('click', function () { O.markAllRead(); U.toast('All notifications marked as read', 'success'); render(); });
+        '<label class="field"><span class="field-label">Type</span><select id="type">' + U.selectOptions(types.map(function (t) { return { value: t, label: TYPE_LABELS[t] }; }), state.type, 'All types') + '</select></label>' +
+        '<button type="button" class="btn" id="all-read"' + (unread ? '' : ' disabled') + '>' + U.icon('check') + '<span>Mark all as read</span></button></form>' +
+        (rows.length ? '<div class="card"><ul class="list">' + rows.map(function (n) {
+          var o = O.okr(n.okrId);
+          return '<li class="notif' + (n.read ? '' : ' unread') + '"><span class="chip type-chip ' + (TYPE_CLASS[n.type] || '') + '">' + esc(TYPE_LABELS[n.type] || n.type) + '</span>' +
+            '<div class="list-main"><div class="list-title">' + (n.read ? '' : '<span class="sr-only">Unread: </span>') + esc(n.title) + '</div><div>' + esc(n.message) + '</div>' +
+            '<div class="list-meta">' + O.fmtDateTime(n.createdOn) + ' · ' + O.fmtRelative(n.createdOn) + (o ? ' · <a href="okr.html?id=' + encodeURIComponent(o.id) + '" data-open="' + esc(n.id) + '">Open ' + esc(o.code) + '</a>' : '') +
+            (n.type === 'Meeting' ? ' · <a href="meetings.html" data-open="' + esc(n.id) + '">Open 1:1s</a>' : '') + (n.type === 'Reminder' ? ' · <a href="checkin.html" data-open="' + esc(n.id) + '">Check in</a>' : '') + '</div></div>' +
+            '<button type="button" class="btn btn-sm btn-subtle" data-toggle-read="' + esc(n.id) + '">' + (n.read ? 'Mark unread' : 'Mark read') + '</button></li>';
+        }).join('') + '</ul></div>' : U.empty(state.show === 'unread' ? 'You are all caught up.' : 'No notifications.'));
+      document.querySelectorAll('input[name="show"]').forEach(function (r) { r.addEventListener('change', function () { state.show = r.value; renderInbox(); }); });
+      $('type').addEventListener('change', function (e) { state.type = e.target.value; renderInbox(); });
+      $('all-read').addEventListener('click', function () { O.markAllRead(); U.toast('All notifications marked as read', 'success'); renderInbox(); });
+      var tc = document.querySelector('#tab-inbox .tab-count');
+      if (tc) tc.textContent = O.unreadCount();
       U.refreshNav();
     }
+
+    function prefs() {
+      var r = O.db.config.reminders, p = O.myPrefs(), ch = p.channels || r.channels || {};
+      return '<form id="prefs-form" class="card stack" style="max-inline-size:640px" novalidate><h2 class="card-title">Check-in reminders</h2>' +
+        '<p class="small muted" style="margin:0">Company schedule: ' + esc(r.interval || r.checkInCadence) + ' on ' + esc(r.reminderDay) + ' at ' + esc(r.checkInTime || '09:00') + ' (' + esc(r.timeZone || 'GST') + ').</p>' +
+        (r.usersCanOverride ? '<label class="field"><span class="field-label">How often do you want reminders?</span><select id="pf-freq">' + U.selectOptions([{ value: '', label: 'Use the company schedule' }, 'Weekly', 'Every 2 weeks', 'Monthly'], p.reminderFrequency || '') + '</select></label>'
+          : '<p class="msg msg-info small">Your administrator has fixed the reminder schedule, so it cannot be changed here.</p>') +
+        '<fieldset><legend>Where should reminders and notifications reach you?</legend><div class="stack-sm">' +
+        '<label class="check"><input type="checkbox" id="pf-teams"' + (ch.teams !== false ? ' checked' : '') + (r.channels && r.channels.teams === false ? ' disabled' : '') + '> Microsoft Teams chat (adaptive cards – update without opening the app)</label>' +
+        '<label class="check"><input type="checkbox" id="pf-email"' + (ch.email ? ' checked' : '') + (r.channels && r.channels.email === false ? ' disabled' : '') + '> Email (Outlook)</label>' +
+        '<p class="small muted" style="margin:0">In-app notifications are always on. Channels switched off by the administrator are greyed out.</p></div></fieldset>' +
+        '<div class="row"><button type="submit" class="btn btn-primary">' + U.icon('check') + '<span>Save preferences</span></button><a class="btn btn-subtle" href="teams.html">Preview in Teams &amp; Outlook</a></div></form>';
+    }
+    $('prefs-form').addEventListener('submit', function (e) {
+      e.preventDefault();
+      var patch = { channels: { teams: $('pf-teams').checked, email: $('pf-email').checked } };
+      if ($('pf-freq')) patch.reminderFrequency = $('pf-freq').value || null;
+      O.setMyPrefs(patch);
+      U.toast('Preferences saved', 'success');
+    });
 
     main.addEventListener('click', function (e) {
       var t = e.target.closest('[data-toggle-read]');
@@ -57,14 +80,14 @@
         var id = t.getAttribute('data-toggle-read');
         var n = O.db.notifications.filter(function (x) { return x.id === id; })[0];
         O.markRead(id, !n.read);
-        render();
+        renderInbox();
         var again = document.querySelector('[data-toggle-read="' + CSS.escape(id) + '"]');
         if (again) again.focus();
       }
       var op = e.target.closest('[data-open]');
       if (op) O.markRead(op.getAttribute('data-open'), true);
     });
-    render();
+    renderInbox();
   })();
   </script>
 </body>

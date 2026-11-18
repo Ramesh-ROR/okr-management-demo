@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>OKR detail · OKR Management System</title>
+  <title>Goal detail · OKR Management System</title>
   <link rel="icon" href="assets/img/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="assets/css/styles.css">
 </head>
@@ -17,13 +17,15 @@
     'use strict';
     var O = window.OKR, U = O.ui, esc = O.esc;
     var o = O.okr(O.param('id'));
-    var main = U.shell('explorer', o ? o.code + ' ' + o.title : 'Item not found');
+    var main = U.shell('explorer', o ? o.code + ' ' + o.title : 'Goal not found');
     if (!main) return;
-    if (!o) {
-      main.innerHTML = U.pageHeader({ title: 'Item not found' }) + U.empty('This item does not exist (it may have been created in another browser). <a href="explorer.html">Back to the OKR Explorer</a>.');
+    if (!o) { main.innerHTML = U.pageHeader({ title: 'Goal not found' }) + U.empty('This goal does not exist (it may have been deleted or created in another browser). <a href="explorer.html">Back to Goals &amp; OKRs</a>.'); return; }
+    if (!O.can.view(o)) {
+      main.innerHTML = U.pageHeader({ title: o.code + ' is private' }) + '<div class="msg msg-warning">' + U.icon('lock') + ' This goal is ' + esc(o.visibility === 'Private' ? 'private' : 'visible to its department only') + '. Only the owner, co-owners, their managers and executives can open it. <a href="explorer.html">Back to Goals &amp; OKRs</a></div>';
       return;
     }
     U.setAiContext({ feature: 'summariseCheckIns', okrId: o.id });
+    var $ = function (x) { return document.getElementById(x); };
 
     function confidenceBars(n) {
       var out = '<span class="confidence" role="img" aria-label="Confidence ' + n + ' out of 10">';
@@ -32,165 +34,218 @@
     }
 
     function render() {
-      var kids = O.children(o.id).sort(O.levelOrder);
+      var allKids = O.children(o.id).filter(O.can.view).sort(O.levelOrder);
+      var kids = allKids.filter(function (k) { return k.level !== 'Personal'; });
+      var aligned = allKids.filter(function (k) { return k.level === 'Personal'; });
       var cis = O.checkInsFor(o.id);
-      var comments = O.db.comments.filter(function (c) { return c.okrId === o.id; }).sort(function (a, b) { return a.createdOn < b.createdOn ? -1 : 1; });
+      var comments = O.db.comments.filter(function (c) { return c.okrId === o.id && O.can.seeComment(c, o); }).sort(function (a, b) { return a.createdOn < b.createdOn ? -1 : 1; });
       var approvals = O.db.approvals.filter(function (a) { return a.okrId === o.id; }).sort(function (a, b) { return a.requestedOn < b.requestedOn ? 1 : -1; });
-      var activity = O.db.audit.filter(function (e) { return e.entityId === o.id || (e.entityName || '').indexOf(o.code + ' ') === 0; }).sort(function (a, b) { return a.timestamp < b.timestamp ? 1 : -1; });
+      var activity = O.db.audit.filter(function (e) { return e.entityId === o.id; }).sort(function (a, b) { return a.timestamp < b.timestamp ? 1 : -1; });
+      var tasks = O.tasksFor(o.id);
       var rolled = o.measurementType === 'RolledUp';
+      var stay = O.isStay(o);
       var expected = O.expectedProgress(o);
       var gap = Math.round(o.progress - expected);
       var childLevel = O.childLevel(o.level);
       var share = O.weightShare(o);
       var parent = O.okr(o.parentId);
+      var conn = o.dataSource && O.connection(o.dataSource.connectionId);
+      var canEdit = O.can.edit(o);
 
       var actions = '';
-      if (O.can.checkIn(o) && O.can.nav('checkin')) actions += '<a class="btn btn-primary" href="checkin.html?id=' + encodeURIComponent(o.id) + '">' + U.icon('checkin') + '<span>Check in</span></a>';
-      if (O.can.edit(o)) actions += '<a class="btn" href="okr-edit.html?id=' + encodeURIComponent(o.id) + '">' + U.icon('edit') + '<span>Edit</span></a>';
+      if (O.can.checkIn(o) && O.can.nav('checkin') && o.measurementType !== 'Tasks') actions += '<a class="btn btn-primary" href="checkin.html?id=' + encodeURIComponent(o.id) + '">' + U.icon('checkin') + '<span>Check in</span></a>';
+      if (canEdit) actions += '<a class="btn" href="okr-edit.html?id=' + encodeURIComponent(o.id) + '">' + U.icon('edit') + '<span>Edit</span></a>';
       if (childLevel && O.can.create(childLevel)) actions += '<a class="btn" href="okr-edit.html?level=' + childLevel + '&parent=' + encodeURIComponent(o.id) + '">' + U.icon('plus') + '<span>Add ' + esc(O.LEVEL_LABELS[childLevel].toLowerCase()) + '</span></a>';
-      if (O.can.edit(o) && o.approvalState === 'Approved' && O.levelConfig(o.level).approvalRequired) actions += '<button type="button" class="btn" id="req">' + U.icon('approvals') + '<span>Request change</span></button>';
-      if (O.db.config.ai.enabled && O.db.config.ai.features.summariseCheckIns) actions += '<button type="button" class="btn btn-subtle" id="ai-sum">' + U.icon('ai') + '<span>Summarise with AI</span></button>';
+      if (O.parentLevelsFor('Personal').indexOf(o.level) >= 0 && O.can.create('Personal')) actions += '<a class="btn" href="okr-edit.html?level=Personal&parent=' + encodeURIComponent(o.id) + '">' + U.icon('plus') + '<span>Align my goal</span></a>';
+      if (O.can.create(o.level)) actions += '<a class="btn btn-subtle" href="okr-edit.html?copy=' + encodeURIComponent(o.id) + '">' + U.icon('copy') + '<span>Duplicate</span></a>';
+      if (canEdit && o.approvalState === 'Approved' && O.levelConfig(o.level).approvalRequired) actions += '<button type="button" class="btn btn-subtle" id="req">' + U.icon('approvals') + '<span>Request change</span></button>';
+      if (O.db.config.ai.enabled && O.db.config.ai.features.summariseCheckIns) actions += '<button type="button" class="btn btn-subtle" id="ai-sum">' + U.icon('ai') + '<span>Summarise</span></button>';
+      if (O.can.remove(o)) actions += '<button type="button" class="btn btn-subtle danger-text" id="delete">' + U.icon('trash') + '<span>Delete</span></button>';
 
       var html = U.pageHeader({
         before: U.breadcrumb(o),
         title: o.title,
-        subtitle: U.levelChip(o.level) + ' <strong>' + esc(o.code) + '</strong> ' + U.statusBadge(o.status) + ' ' + U.approvalChip(o.approvalState) + ' ' + U.flagChips(o),
+        subtitle: U.levelChip(o.level) + ' <strong>' + esc(o.code) + '</strong> ' + U.statusBadge(o.status) + ' ' + U.approvalChip(o.approvalState) + ' ' + U.visibilityChip(o) + ' ' + U.labelChips(o) + ' ' + U.flagChips(o),
         actions: actions,
       });
+      if (o.closedState) html += '<div class="msg msg-info" style="margin-block-end:16px">This goal is <strong>' + esc(O.CLOSED_STATES[o.closedState].toLowerCase()) + '</strong> at the end of ' + esc(O.cycle(o.cycleId).name) + ' with ' + O.pct(o.progress) + ' progress. It is read-only.</div>';
+      if (o.approvalState === 'PendingApproval') html += '<div class="msg msg-info" style="margin-block-end:16px">Waiting for approval. It still counts in roll-ups so its impact is visible.</div>';
+      if (o.approvalState === 'Draft') html += '<div class="msg msg-info" style="margin-block-end:16px">Draft – not yet submitted for approval.' + (canEdit ? ' <button type="button" class="linklike" id="submit-draft">Submit for approval now</button>' : '') + '</div>';
+      if (o.approvalState === 'Rejected') html += '<div class="msg msg-error" style="margin-block-end:16px">This goal was rejected and is excluded from roll-ups.</div>';
 
-      if (o.approvalState === 'PendingApproval') html += '<div class="msg msg-info" style="margin-block-end:16px">This ' + esc(O.LEVEL_LABELS[o.level].toLowerCase()) + ' is waiting for approval by the ' + esc(O.ROLE_LABELS[O.levelConfig(o.level).approverRole]) + '. It still counts in roll-ups so its impact is visible.</div>';
-      if (o.approvalState === 'Draft') html += '<div class="msg msg-info" style="margin-block-end:16px">Draft – not yet submitted for approval. <button type="button" class="linklike" id="submit-draft">Submit for approval now</button></div>';
-      if (o.approvalState === 'Rejected') html += '<div class="msg msg-error" style="margin-block-end:16px">This item was rejected and is excluded from roll-ups. Edit it and create a new request if needed.</div>';
+      var progressText;
+      if (rolled) progressText = 'Rolled up from ' + kids.filter(O.countsInRollup).length + ' child goal(s) (weighted average).';
+      else if (stay) progressText = 'Current ' + esc(O.fmtValue(o, o.current)) + ' against a threshold of ' + esc(O.fmtTarget(o)) + '. ' + (o.progress >= 100 ? 'The threshold is met.' : 'The threshold is not met (' + O.pct(o.progress) + ' of the way there from the baseline ' + esc(O.fmtValue(o, o.baseline)) + ').');
+      else if (o.measurementType === 'Binary') progressText = o.current >= 1 ? 'Done.' : 'Not done yet – due ' + O.fmtDate(o.dueDate) + '.';
+      else if (o.measurementType === 'Tasks') progressText = esc(O.fmtValue(o, o.current)) + ' done. Progress follows the linked ' + (tasks[0] && tasks[0].source === 'ToDo' ? 'Microsoft To Do' : 'Microsoft Planner') + ' tasks.';
+      else progressText = 'Current ' + esc(O.fmtValue(o, o.current)) + ' · baseline ' + esc(O.fmtValue(o, o.baseline)) + ' → target ' + esc(O.fmtTarget(o)) + '.';
+      if (!stay && !o.closedState) progressText += ' Expected by today: ' + O.pct(expected) + ' (' + (gap >= 0 ? gap + ' points ahead' : -gap + ' points behind') + ').';
 
-      // progress + facts
       html += '<div class="detail-grid" style="margin-block-end:20px"><div class="stack">' +
         '<section class="card" aria-labelledby="prog-h"><h2 class="card-title" id="prog-h" style="margin-block-end:10px">Progress</h2>' +
-        '<div class="big-progress"><span class="num">' + O.pct(o.progress) + '</span>' + U.statusBadge(o.status) + '</div>' +
-        '<div style="margin-block:10px">' + U.progress(o.progress, o.status, o.code) + '</div>' +
-        '<p class="muted" style="margin:0">' + (rolled
-          ? 'Rolled up from ' + kids.length + ' ' + esc(O.LEVEL_LABELS[childLevel || 'KeyResult'].toLowerCase()) + (kids.length === 1 ? '' : 's') + ' (weighted average).'
-          : 'Current ' + esc(O.fmtValue(o, o.current)) + ' · baseline ' + esc(O.fmtValue(o, o.baseline)) + ' → target ' + esc(O.fmtValue(o, o.target)) + '.') +
-        ' Expected by today: ' + O.pct(expected) + ' (' + (gap >= 0 ? gap + ' points ahead' : -gap + ' points behind') + ').</p>' +
-        (o.description ? '<p style="margin:12px 0 0">' + esc(o.description) + '</p>' : '') + '</section>';
-
-      var points = cis.map(function (c) {
-        return { date: c.date, value: c.progress, status: c.status, tip: O.fmtDate(c.date) + ': ' + Math.round(c.progress) + '% · ' + O.STATUS[c.status].label };
-      });
+        '<div class="big-progress"><span class="num">' + O.pct(o.progress) + '</span>' + U.statusBadge(o.status) + '</div><div style="margin-block:10px">' + U.progress(o.progress, o.status, o.code) + '</div>' +
+        '<p class="muted" style="margin:0">' + progressText + '</p>' + (o.description ? '<p style="margin:12px 0 0">' + esc(o.description) + '</p>' : '') + '</section>';
+      if (conn) {
+        html += '<section class="card source-card" aria-labelledby="src-h"><div class="card-head"><div><h2 class="card-title" id="src-h">' + U.icon('sync') + ' Updated automatically</h2><p class="card-desc">' + esc(O.CONNECTION_TYPES[conn.type]) + ' · ' + esc(conn.refresh) + '</p></div>' +
+          (O.can.checkIn(o) ? '<button type="button" class="btn btn-sm" id="sync">' + U.icon('sync') + '<span>Sync now</span></button>' : '') + '</div>' +
+          '<dl class="facts"><dt>Source</dt><dd>' + esc(conn.name) + '</dd><dt>Location</dt><dd class="small">' + esc(conn.detail) + '</dd><dt>Field</dt><dd><code>' + esc(o.dataSource.field) + '</code></dd><dt>Last sync</dt><dd>' + O.fmtDateTime(o.dataSource.lastSync) + ' <span class="muted">(' + O.fmtRelative(o.dataSource.lastSync) + ')</span></dd></dl>' +
+          '<p class="small muted" style="margin:8px 0 0">Owners can still add a narrative check-in; the value itself comes from the source.</p></section>';
+      }
+      var points = cis.map(function (c) { return { date: c.date, value: c.progress, status: c.status, tip: O.fmtDate(c.date) + ': ' + esc(O.fmtValue(o, c.value)) + ' · ' + Math.round(c.progress) + '% · ' + O.STATUS[c.status].label }; });
       html += U.chartCard({
-        id: 'trend', title: 'Progress over time', desc: cis.length ? cis.length + ' check-ins' : 'No check-ins yet',
-        chart: cis.length ? U.progressLine(points, o) : U.empty('No check-ins yet. The chart appears after the first check-in.'),
-        table: cis.length ? U.simpleTable(['Date', 'Progress', 'Status'], cis.map(function (c) { return [O.fmtDate(c.date), Math.round(c.progress) + '%', esc(O.STATUS[c.status].label)]; }), 'Progress by check-in') : '',
+        id: 'trend', title: 'Progress over time', desc: cis.length ? cis.length + ' updates' : 'No updates yet',
+        chart: cis.length ? U.progressLine(points, o) : U.empty('No check-ins yet. The chart appears after the first update.'),
+        table: cis.length ? U.simpleTable(['Date', 'Value', 'Progress', 'Status'], cis.map(function (c) { return [O.fmtDate(c.date), esc(O.fmtValue(o, c.value)), Math.round(c.progress) + '%', esc(O.STATUS[c.status].label)]; }), 'Progress by check-in') : '',
       }) + '</div>';
 
       html += '<section class="card" aria-labelledby="facts-h"><h2 class="card-title" id="facts-h" style="margin-block-end:12px">Details</h2><dl class="facts">' +
         '<dt>Owner</dt><dd>' + U.person(o.ownerId, true) + '</dd>' +
-        '<dt>Department</dt><dd>' + esc(O.dept(o.departmentId) ? O.dept(o.departmentId).name : '–') + '</dd>' +
-        '<dt>Team</dt><dd>' + esc(O.team(o.teamId) ? O.team(o.teamId).name : '–') + '</dd>' +
-        '<dt>Parent</dt><dd>' + (parent ? U.okrLink(parent, false) : '–') + '</dd>' +
-        '<dt>Measurement</dt><dd>' + esc(O.MEASUREMENT_LABELS[o.measurementType]) + '</dd>' +
-        (rolled ? '' : '<dt>Baseline</dt><dd>' + esc(O.fmtValue(o, o.baseline)) + '</dd><dt>Current</dt><dd>' + esc(O.fmtValue(o, o.current)) + '</dd><dt>Target</dt><dd>' + esc(O.fmtValue(o, o.target)) + '</dd>') +
-        '<dt>Weight</dt><dd>' + esc(o.weight) + (share !== null ? ' <span class="muted">(' + Math.round(share) + '% of ' + esc(parent ? parent.code : 'parent') + ')</span>' : '') + '</dd>' +
-        '<dt>Start</dt><dd>' + O.fmtDate(o.startDate) + '</dd>' +
-        '<dt>Due</dt><dd>' + O.fmtDate(o.dueDate) + '</dd>' +
-        '<dt>Last check-in</dt><dd>' + (o.lastCheckInOn ? O.fmtDate(o.lastCheckInOn) + ' <span class="muted">(' + O.fmtRelative(o.lastCheckInOn) + ')</span>' : 'Never') + '</dd>' +
+        ((o.coOwnerIds || []).length ? '<dt>Co-owners</dt><dd class="stack-sm">' + o.coOwnerIds.map(function (c) { return U.person(c); }).join('') + '</dd>' : '') +
+        '<dt>Department</dt><dd>' + esc((O.dept(o.departmentId) || {}).name || '–') + '</dd><dt>Team</dt><dd>' + esc((O.team(o.teamId) || {}).name || '–') + '</dd>' +
+        '<dt>Aligned to</dt><dd>' + (parent ? U.okrLink(parent, false) + (O.countsInRollup(o) ? '' : ' <span class="muted small">(alignment only – not counted in its progress)</span>') : '–') + '</dd>' +
+        '<dt>Measured as</dt><dd>' + esc(O.MEASUREMENT_LABELS[o.measurementType]) + '</dd>' +
+        (rolled ? '' : '<dt>Target</dt><dd>' + esc(O.fmtTarget(o)) + '</dd>') +
+        '<dt>Weight</dt><dd>' + esc(o.weight) + (share !== null && parent ? ' <span class="muted">(' + Math.round(share) + '% of ' + esc(parent.code) + ')</span>' : '') + '</dd>' +
+        '<dt>Labels</dt><dd>' + (U.labelChips(o) || '–') + '</dd>' +
+        '<dt>Visibility</dt><dd>' + esc(o.visibility === 'Private' ? 'Private' : o.visibility === 'Department' ? 'Department only' : 'Everyone') + '</dd>' +
+        '<dt>Cycle</dt><dd>' + esc((O.cycle(o.cycleId) || {}).name || o.cycleId) + '</dd>' +
+        '<dt>Start → due</dt><dd>' + O.fmtDate(o.startDate) + ' → ' + O.fmtDate(o.dueDate) + '</dd>' +
+        '<dt>Last update</dt><dd>' + (o.lastCheckInOn ? O.fmtDate(o.lastCheckInOn) + ' <span class="muted">(' + O.fmtRelative(o.lastCheckInOn) + ')</span>' : 'Never') + '</dd>' +
         '<dt>Approval</dt><dd>' + esc(O.APPROVAL_STATES[o.approvalState]) + '</dd>' +
-        '<dt>Visibility</dt><dd>' + esc(o.visibility) + '</dd>' +
-        '<dt>Last modified</dt><dd>' + O.fmtDateTime(o.modifiedOn) + '</dd>' +
         '</dl></section></div>';
 
       // tabs
-      var tab = function (key, label, count) { return '<button type="button" role="tab" id="tab-' + key + '" data-tab="' + key + '" aria-controls="panel-' + key + '">' + label + '<span class="tab-count">' + count + '</span></button>'; };
-      html += '<section id="tabs"><div class="tablist" role="tablist" aria-label="Item information">' +
-        (childLevel ? tab('children', esc(O.LEVEL_LABELS[childLevel]) + 's', kids.length) : '') +
-        tab('checkins', 'Check-ins', cis.length) + tab('comments', 'Comments', comments.length) + tab('approvals', 'Approvals', approvals.length) + tab('activity', 'Activity', activity.length) + '</div>';
-
-      if (childLevel) {
-        var wsum = kids.reduce(function (s, k) { return s + (Number(k.weight) || 0); }, 0);
-        html += '<div role="tabpanel" id="panel-children" data-panel="children" aria-labelledby="tab-children">' + (kids.length
-          ? '<p class="muted small">Weights add up to ' + wsum + '; each child’s share of ' + esc(o.code) + '’s progress is its weight ÷ ' + wsum + '.</p><div class="card" style="padding:0"><div class="table-wrap"><table class="data"><thead><tr><th scope="col">Item</th><th scope="col">Owner</th><th scope="col">Progress</th><th scope="col">Status</th><th scope="col" class="num">Weight</th><th scope="col" class="num">Share</th><th scope="col">Due</th></tr></thead><tbody>' +
-            kids.map(function (k) {
-              return '<tr><td class="cell-title">' + U.okrLink(k) + ' ' + U.flagChips(k) + '</td><td class="nowrap">' + U.person(k.ownerId) + '</td><td style="min-inline-size:150px">' + U.progress(k.progress, k.status, k.code) + '</td><td>' + U.statusBadge(k.status) + '</td>' +
-                '<td class="num">' + esc(k.weight) + '</td><td class="num">' + (wsum ? Math.round((k.weight / wsum) * 100) : 0) + '%</td><td class="nowrap small">' + O.fmtDate(k.dueDate) + '</td></tr>';
-            }).join('') + '</tbody></table></div></div>'
-          : U.empty('No ' + esc(O.LEVEL_LABELS[childLevel].toLowerCase()) + 's yet.' + (O.can.create(childLevel) ? ' <a href="okr-edit.html?level=' + childLevel + '&parent=' + encodeURIComponent(o.id) + '">Add the first one</a>.' : ''))) + '</div>';
-      }
-
-      html += '<div role="tabpanel" id="panel-checkins" data-panel="checkins" aria-labelledby="tab-checkins">' + (cis.length
-        ? '<div class="card" style="padding:0"><div class="table-wrap"><table class="data"><thead><tr><th scope="col">Date</th><th scope="col">By</th><th scope="col" class="num">Value</th><th scope="col" class="num">Progress</th><th scope="col">Status</th><th scope="col">Confidence</th><th scope="col">Narrative</th></tr></thead><tbody>' +
-          cis.slice().reverse().map(function (c) {
-            var u = O.user(c.authorId);
-            return '<tr><td class="nowrap">' + O.fmtDate(c.date) + '</td><td class="nowrap small">' + esc(u ? u.displayName : '–') + '</td><td class="num nowrap">' + esc(O.fmtValue(o, c.value)) + '</td><td class="num">' + Math.round(c.progress) + '%</td><td>' + U.statusBadge(c.status) + '</td><td>' + (c.confidence ? confidenceBars(c.confidence) : '–') + '</td><td>' + esc(c.narrative) + '</td></tr>';
-          }).join('') + '</tbody></table></div></div>'
-        : U.empty('No check-ins yet.')) + '</div>';
-
-      html += '<div role="tabpanel" id="panel-comments" data-panel="comments" aria-labelledby="tab-comments"><div class="stack" style="max-inline-size:760px">' +
-        (comments.length ? comments.map(function (c) {
-          return '<div class="row" style="align-items:flex-start;flex-wrap:nowrap">' + U.avatar(c.authorId, 32) + '<div class="comment" style="flex:1"><div class="row" style="justify-content:space-between"><strong>' + esc((O.user(c.authorId) || {}).displayName || '–') + '</strong><span class="small muted">' + O.fmtDateTime(c.createdOn) + '</span></div><div>' + esc(c.text) + '</div></div></div>';
-        }).join('') : U.empty('No comments yet.')) +
-        '<form id="comment-form" class="stack-sm" novalidate><label class="field"><span class="field-label">Add a comment</span><textarea id="comment-text" rows="3" placeholder="Ask a question or share context. The owner is notified."></textarea></label><span class="error" id="comment-err" hidden>Write a comment first.</span>' +
-        '<div><button type="submit" class="btn btn-primary">' + U.icon('comment') + '<span>Post comment</span></button></div></form></div></div>';
-
-      html += '<div role="tabpanel" id="panel-approvals" data-panel="approvals" aria-labelledby="tab-approvals">' + (approvals.length
-        ? '<div class="card" style="padding:0"><div class="table-wrap"><table class="data"><thead><tr><th scope="col">Request</th><th scope="col">Summary</th><th scope="col">Requested</th><th scope="col">Approver</th><th scope="col">Decision</th><th scope="col">Comment</th></tr></thead><tbody>' +
-          approvals.map(function (a) {
-            var by = O.user(a.requestedById), dec = O.user(a.decidedById);
-            return '<tr><td class="nowrap">' + esc(O.REQUEST_TYPES[a.requestType]) + '</td><td>' + esc(a.summary) + '</td><td class="small">' + esc(by ? by.displayName : '–') + '<br>' + O.fmtDate(a.requestedOn) + '</td><td class="small">' + esc(O.ROLE_LABELS[a.approverRole]) + '</td>' +
-              '<td>' + U.decisionChip(a.decision) + (dec ? '<div class="small muted">' + esc(dec.displayName) + ', ' + O.fmtDate(a.decidedOn) + '</div>' : '') + '</td><td class="small">' + esc(a.comment || '–') + '</td></tr>';
-          }).join('') + '</tbody></table></div></div>'
-        : U.empty('No approval requests for this item.')) + '</div>';
-
-      html += '<div role="tabpanel" id="panel-activity" data-panel="activity" aria-labelledby="tab-activity">' + (activity.length
-        ? '<div class="card"><ul class="timeline">' + activity.map(function (e) {
-            var u = O.user(e.actorId);
-            return '<li><div><strong>' + esc(u ? u.displayName : 'System') + '</strong> · ' + esc(e.details) + '</div><div class="small muted">' + esc(e.action) + ' · ' + O.fmtDateTime(e.timestamp) + '</div></li>';
-          }).join('') + '</ul></div>'
-        : U.empty('No recorded activity yet.')) + '</div></section>';
-
+      var T = U.tabButton, Pn = U.tabPanel, tabs = '', panels = '';
+      if (childLevel) { tabs += T('children', esc(O.LEVEL_LABELS[childLevel]) + 's', kids.length); panels += Pn('children', childrenPanel(kids, childLevel)); }
+      if (O.parentLevelsFor('Personal').indexOf(o.level) >= 0) { tabs += T('aligned', 'Aligned individual goals', aligned.length); panels += Pn('aligned', alignedPanel(aligned)); }
+      if (o.measurementType === 'Tasks') { tabs += T('tasks', 'Tasks', tasks.filter(function (t) { return t.done; }).length + '/' + tasks.length); panels += Pn('tasks', tasksPanel(tasks)); }
+      tabs += T('checkins', 'Check-ins', cis.length) + T('comments', 'Comments', comments.length) + T('approvals', 'Approvals', approvals.length) + T('activity', 'Activity', activity.length);
+      panels += Pn('checkins', checkinsPanel(cis)) + Pn('comments', commentsPanel(comments)) + Pn('approvals', approvalsPanel(approvals)) + Pn('activity', activityPanel(activity));
+      html += '<section id="tabs"><div class="tablist" role="tablist" aria-label="Goal information">' + tabs + '</div>' + panels + '</section>';
       main.innerHTML = html;
-      U.tabs(document.getElementById('tabs'));
+      U.tabs($('tabs'));
       bind();
     }
 
+    function childrenPanel(kids, childLevel) {
+      var counted = kids.filter(O.countsInRollup);
+      var wsum = counted.reduce(function (s, k) { return s + (Number(k.weight) || 0); }, 0);
+      if (!kids.length) return U.empty('No ' + esc(O.LEVEL_LABELS[childLevel].toLowerCase()) + 's yet.' + (O.can.create(childLevel) ? ' <a href="okr-edit.html?level=' + childLevel + '&parent=' + encodeURIComponent(o.id) + '">Add the first one</a>.' : ''));
+      return '<p class="muted small">' + (O.db.config.weightsInRollup === false ? 'Weights are switched off: every child counts equally.' : 'Weights add up to ' + wsum + '; each child’s share of ' + esc(o.code) + '’s progress is its weight ÷ ' + wsum + '.') + '</p>' +
+        '<div class="card" style="padding:0"><div class="table-wrap"><table class="data"><thead><tr><th scope="col">Goal</th><th scope="col">Owner</th><th scope="col">Progress</th><th scope="col">Status</th><th scope="col" class="num">Weight</th><th scope="col" class="num">Share</th><th scope="col">Due</th></tr></thead><tbody>' +
+        kids.map(function (k) {
+          return '<tr><td class="cell-title">' + U.okrLink(k) + ' ' + U.flagChips(k) + ' ' + U.sourceChip(k) + '</td><td class="nowrap">' + U.owners(k) + '</td><td style="min-inline-size:150px">' + U.progress(k.progress, k.status, k.code) + '</td><td>' + U.statusBadge(k.status) + '</td>' +
+            '<td class="num">' + esc(k.weight) + '</td><td class="num">' + (O.countsInRollup(k) && wsum ? Math.round((k.weight / wsum) * 100) + '%' : '–') + '</td><td class="nowrap small">' + O.fmtDate(k.dueDate) + '</td></tr>';
+        }).join('') + '</tbody></table></div></div>';
+    }
+    function alignedPanel(list) {
+      var intro = '<p class="muted small">Individual goals that people have aligned to ' + esc(o.code) + '. They show contribution but do not change its progress unless the owner chose to count them.</p>';
+      if (!list.length) return intro + U.empty('No individual goals aligned yet.' + (O.can.create('Personal') ? ' <a href="okr-edit.html?level=Personal&parent=' + encodeURIComponent(o.id) + '">Align one of yours</a>.' : ''));
+      return intro + '<ul class="list card">' + list.map(function (k) { return '<li>' + U.avatar(k.ownerId, 32) + '<div class="list-main">' + U.okrLink(k) + ' ' + U.visibilityChip(k) + '<div class="list-meta">' + esc((O.user(k.ownerId) || {}).displayName) + ' · ' + esc(O.MEASUREMENT_LABELS[k.measurementType]) + '</div></div><div style="inline-size:160px">' + U.progress(k.progress, k.status, k.code) + '</div>' + U.statusBadge(k.status) + '</li>'; }).join('') + '</ul>';
+    }
+    function tasksPanel(tasks) {
+      var src = tasks[0] && tasks[0].source === 'ToDo' ? 'Microsoft To Do' : 'Microsoft Planner';
+      var canTick = O.can.checkIn(o);
+      return '<div class="row" style="justify-content:space-between;margin-block-end:8px"><p class="muted small" style="margin:0">' + U.icon('sync') + ' Synced with ' + src + (o.dataSource ? ' · ' + esc(o.dataSource.field) : '') + '. Ticking a task here updates it there, and progress follows automatically.</p></div>' +
+        '<div class="card"><ul class="task-list">' + tasks.map(function (t) {
+          return '<li><label class="check"><input type="checkbox" data-task="' + esc(t.id) + '"' + (t.done ? ' checked' : '') + (canTick ? '' : ' disabled') + '> <span class="' + (t.done ? 'done' : '') + '">' + esc(t.title) + '</span></label><span class="small muted">' + esc((O.user(t.assigneeId) || {}).displayName || '') + ' · due ' + O.fmtShort(t.dueDate) + '</span></li>';
+        }).join('') + '</ul>' +
+        (canTick ? '<form id="task-form" class="row" style="margin-block-start:12px" novalidate><label class="sr-only" for="task-title">New task</label><input type="text" id="task-title" placeholder="Add a task" style="flex:1"><button type="submit" class="btn btn-sm">' + U.icon('plus') + '<span>Add task</span></button></form>' : '') + '</div>';
+    }
+    function checkinsPanel(cis) {
+      if (!cis.length) return U.empty('No check-ins yet.');
+      return '<div class="card" style="padding:0"><div class="table-wrap"><table class="data"><thead><tr><th scope="col">Date</th><th scope="col">By</th><th scope="col" class="num">Value</th><th scope="col" class="num">Progress</th><th scope="col">Status</th><th scope="col">Confidence</th><th scope="col">Narrative</th></tr></thead><tbody>' +
+        cis.slice().reverse().map(function (c) {
+          var u = O.user(c.authorId);
+          return '<tr><td class="nowrap">' + O.fmtDate(c.date) + (c.channel && c.channel !== 'Web' ? '<div class="small muted">via ' + esc(c.channel) + '</div>' : '') + '</td><td class="nowrap small">' + esc(u ? u.displayName : '–') + '</td><td class="num nowrap">' + esc(O.fmtValue(o, c.value)) + '</td><td class="num">' + Math.round(c.progress) + '%</td><td>' + U.statusBadge(c.status) + '</td><td>' + (c.confidence ? confidenceBars(c.confidence) : '–') + '</td><td>' + esc(c.narrative) + '</td></tr>';
+        }).join('') + '</tbody></table></div></div>';
+    }
+    function commentsPanel(comments) {
+      return '<div class="stack" style="max-inline-size:760px">' + (comments.length ? comments.map(function (c) {
+        return '<div class="row" style="align-items:flex-start;flex-wrap:nowrap">' + U.avatar(c.authorId, 32) + '<div class="comment' + (c.private ? ' comment-private' : '') + '" style="flex:1"><div class="row" style="justify-content:space-between"><strong>' + esc((O.user(c.authorId) || {}).displayName || '–') + (c.private ? ' <span class="chip vis-chip">' + U.icon('lock') + 'Private</span>' : '') + '</strong><span class="small muted">' + O.fmtDateTime(c.createdOn) + '</span></div><div>' + esc(c.text) + '</div></div></div>';
+      }).join('') : U.empty('No comments yet.')) +
+        '<form id="comment-form" class="stack-sm" novalidate><label class="field"><span class="field-label">Add a comment</span><textarea id="comment-text" rows="3" placeholder="Ask a question or share context. The owner is notified."></textarea></label><span class="error" id="comment-err" hidden>Write a comment first.</span>' +
+        '<div class="row"><button type="submit" class="btn btn-primary">' + U.icon('comment') + '<span>Post comment</span></button><label class="check small"><input type="checkbox" id="comment-private"> Private – only the owner, co-owners and their managers can see it</label></div></form></div>';
+    }
+    function approvalsPanel(list) {
+      if (!list.length) return U.empty('No approval requests for this goal.');
+      return '<div class="card" style="padding:0"><div class="table-wrap"><table class="data"><thead><tr><th scope="col">Request</th><th scope="col">Summary</th><th scope="col">Requested</th><th scope="col">Approver</th><th scope="col">Decision</th><th scope="col">Comment</th></tr></thead><tbody>' +
+        list.map(function (a) {
+          var by = O.user(a.requestedById), dec = O.user(a.decidedById), appr = a.approverId ? (O.user(a.approverId) || {}).displayName + ' (manager)' : O.ROLE_LABELS[a.approverRole];
+          return '<tr><td class="nowrap">' + esc(O.REQUEST_TYPES[a.requestType]) + '</td><td>' + esc(a.summary) + '</td><td class="small">' + esc(by ? by.displayName : '–') + '<br>' + O.fmtDate(a.requestedOn) + '</td><td class="small">' + esc(appr) + '</td>' +
+            '<td>' + U.decisionChip(a.decision) + (dec ? '<div class="small muted">' + esc(dec.displayName) + ', ' + O.fmtDate(a.decidedOn) + '</div>' : '') + '</td><td class="small">' + esc(a.comment || '–') + '</td></tr>';
+        }).join('') + '</tbody></table></div></div>';
+    }
+    function activityPanel(list) {
+      if (!list.length) return U.empty('No recorded activity yet.');
+      return '<div class="card"><ul class="timeline">' + list.map(function (e) {
+        var u = O.user(e.actorId);
+        return '<li><div><strong>' + esc(u ? u.displayName : 'System') + '</strong> · ' + esc(e.details) + '</div><div class="small muted">' + esc(e.action) + ' · ' + O.fmtDateTime(e.timestamp) + '</div></li>';
+      }).join('') + '</ul></div>';
+    }
+
     function bind() {
-      var form = document.getElementById('comment-form');
-      form.addEventListener('submit', function (e) {
+      $('comment-form').addEventListener('submit', function (e) {
         e.preventDefault();
-        var ta = document.getElementById('comment-text');
-        var err = document.getElementById('comment-err');
+        var ta = $('comment-text'), err = $('comment-err');
         if (!ta.value.trim()) { err.hidden = false; ta.setAttribute('aria-invalid', 'true'); ta.setAttribute('aria-describedby', 'comment-err'); ta.focus(); return; }
-        O.addComment(o.id, ta.value.trim());
+        O.addComment(o.id, ta.value.trim(), $('comment-private').checked);
         U.toast('Comment posted', 'success', 'The owner has been notified.');
         render();
-        var t = document.getElementById('comment-text');
-        if (t) t.focus();
+        if ($('comment-text')) $('comment-text').focus();
       });
-      var ai = document.getElementById('ai-sum');
-      if (ai) ai.addEventListener('click', function () { var b = document.getElementById('ai-open'); if (b) { if (!document.getElementById('ai-drawer').hidden) b.click(); b.click(); } });
-      var sub = document.getElementById('submit-draft');
-      if (sub) sub.addEventListener('click', function () {
+      if ($('ai-sum')) $('ai-sum').addEventListener('click', function () { U.openAi({ feature: 'summariseCheckIns', okrId: o.id }); });
+      if ($('submit-draft')) $('submit-draft').addEventListener('click', function () {
         O.requestApproval(o.id, 'Create', 'New ' + O.LEVEL_LABELS[o.level].toLowerCase() + ': ' + o.title);
-        U.toast('Submitted for approval', 'success', 'The ' + O.ROLE_LABELS[O.levelConfig(o.level).approverRole] + ' has been notified.');
+        U.toast('Submitted for approval', 'success');
         render();
       });
-      var req = document.getElementById('req');
-      if (req) req.addEventListener('click', requestDialog);
+      if ($('req')) $('req').addEventListener('click', requestDialog);
+      if ($('sync')) $('sync').addEventListener('click', function () {
+        var before = o.progress;
+        var v = O.syncNow(o.id);
+        U.toast('Synced from ' + O.connection(o.dataSource.connectionId).name, 'success', 'New value ' + O.fmtValue(o, v) + ' · progress ' + O.pct(before) + ' → ' + O.pct(o.progress) + '. Parent goals were recalculated.');
+        render();
+      });
+      if ($('delete')) $('delete').addEventListener('click', function () {
+        U.dialog({
+          title: 'Delete ' + o.code + '?', body: '<p>“' + esc(o.title) + '” and its check-in history will be removed. The audit log keeps a record. This cannot be undone (except by resetting the demo data).</p>',
+          okLabel: 'Delete', okClass: 'btn-danger',
+          onOk: function () { var p = o.parentId; O.deleteOkr(o.id); U.flash(o.code + ' deleted', 'success'); window.location.href = p ? 'okr.html?id=' + encodeURIComponent(p) : 'explorer.html'; },
+        });
+      });
+      document.querySelectorAll('[data-task]').forEach(function (cb) {
+        cb.addEventListener('change', function () {
+          var before = o.progress;
+          O.setTaskDone(cb.getAttribute('data-task'), cb.checked);
+          U.toast('Task updated', 'success', 'Progress ' + O.pct(before) + ' → ' + O.pct(o.progress) + '. Synced with ' + (o.level === 'Personal' ? 'Microsoft To Do' : 'Microsoft Planner') + '.');
+          render();
+        });
+      });
+      if ($('task-form')) $('task-form').addEventListener('submit', function (e) {
+        e.preventDefault();
+        var t = $('task-title').value.trim();
+        if (!t) { $('task-title').focus(); return; }
+        O.addTask(o.id, t);
+        U.toast('Task added', 'success');
+        render();
+        $('task-title').focus();
+      });
     }
 
     function requestDialog() {
-      var rolled = o.measurementType === 'RolledUp';
       var types = [{ value: 'Closure', label: 'Close as completed' }, { value: 'WeightChange', label: 'Change weight' }];
-      if (!rolled) types.unshift({ value: 'TargetChange', label: 'Change target' });
+      if (o.measurementType !== 'RolledUp' && o.measurementType !== 'Tasks' && o.measurementType !== 'Binary') types.unshift({ value: 'TargetChange', label: 'Change target' });
       U.dialog({
         title: 'Request a change to ' + o.code,
-        body: '<p class="muted" style="margin:0">Approved items need sign-off from the ' + esc(O.ROLE_LABELS[O.levelConfig(o.level).approverRole]) + ' before these changes take effect.</p>' +
+        body: '<p class="muted" style="margin:0">Approved goals need sign-off before these changes take effect.</p>' +
           '<label class="field"><span class="field-label">Request</span><select id="rq-type">' + U.selectOptions(types) + '</select></label>' +
           '<label class="field" id="rq-target-f"><span class="field-label">New target (' + esc(o.measurementType === 'Currency' ? 'AED' : o.unit) + ')</span><input type="number" step="any" id="rq-target" value="' + esc(o.target) + '"></label>' +
           '<label class="field" id="rq-weight-f" hidden><span class="field-label">New weight</span><input type="number" min="0" step="1" id="rq-weight" value="' + esc(o.weight) + '"></label>' +
-          '<label class="field"><span class="field-label">Reason<span class="req" aria-hidden="true">*</span></span><textarea id="rq-reason" rows="3" required aria-required="true"></textarea><span class="error" id="rq-err" hidden>Give a short reason.</span></label>',
+          '<label class="field"><span class="field-label">Reason<span class="req" aria-hidden="true">*</span></span><textarea id="rq-reason" rows="3" aria-required="true"></textarea><span class="error" id="rq-err" hidden>Give a short reason.</span></label>',
         okLabel: 'Submit request',
         onOk: function (dlg) {
-          var type = dlg.querySelector('#rq-type').value;
-          var reason = dlg.querySelector('#rq-reason').value.trim();
+          var type = dlg.querySelector('#rq-type').value, reason = dlg.querySelector('#rq-reason').value.trim();
           if (!reason) { dlg.querySelector('#rq-err').hidden = false; dlg.querySelector('#rq-reason').setAttribute('aria-invalid', 'true'); dlg.querySelector('#rq-reason').focus(); return false; }
           var proposed = null, summary;
           if (type === 'TargetChange') { var t = Number(dlg.querySelector('#rq-target').value); proposed = { target: t }; summary = 'Change target from ' + O.fmtValue(o, o.target) + ' to ' + O.fmtValue(o, t) + '. ' + reason; }
@@ -201,15 +256,11 @@
           render();
         },
       });
-      var sel = document.getElementById('rq-type');
-      var sync = function () {
-        document.getElementById('rq-target-f').hidden = sel.value !== 'TargetChange';
-        document.getElementById('rq-weight-f').hidden = sel.value !== 'WeightChange';
-      };
+      var sel = $('rq-type');
+      var sync = function () { $('rq-target-f').hidden = sel.value !== 'TargetChange'; $('rq-weight-f').hidden = sel.value !== 'WeightChange'; };
       sel.addEventListener('change', sync);
       sync();
     }
-
     render();
   })();
   </script>

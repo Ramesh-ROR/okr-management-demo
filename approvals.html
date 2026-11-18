@@ -48,7 +48,7 @@
               '<td class="cell-title">' + (o ? U.levelChip(o.level) + ' ' + U.okrLink(o) : esc(a.okrId)) + '</td>' +
               '<td style="min-inline-size:220px">' + esc(a.summary) + (change ? '<div class="small"><strong>Proposed:</strong> ' + esc(change) + '</div>' : '') + '</td>' +
               '<td class="nowrap small">' + esc(by ? by.displayName : '–') + '<br><span class="muted">' + O.fmtDate(a.requestedOn) + '</span></td>' +
-              '<td class="small">' + esc(O.ROLE_LABELS[a.approverRole]) + (a.approverRole === 'DepartmentCoordinator' && O.dept(a.departmentId) ? '<br><span class="muted">' + esc(O.dept(a.departmentId).code) + '</span>' : '') + '</td>' +
+              '<td class="small">' + (a.approverId ? esc((O.user(a.approverId) || {}).displayName) + '<br><span class="muted">Line manager</span>' : esc(O.ROLE_LABELS[a.approverRole]) + (a.approverRole === 'DepartmentCoordinator' && O.dept(a.departmentId) ? '<br><span class="muted">' + esc(O.dept(a.departmentId).code) + '</span>' : '')) + '</td>' +
               '<td>' + decideCell + '</td></tr>';
           }).join('') + '</tbody></table></div></div>';
       }
@@ -57,10 +57,11 @@
       var panel = function (key, html) { return '<div role="tabpanel" id="panel-' + key + '" data-panel="' + key + '" aria-labelledby="tab-' + key + '">' + html + '</div>'; };
       main.innerHTML = U.pageHeader({
         title: 'Approvals',
-        subtitle: 'New items, target and weight changes, and closures that need sign-off. You are acting as ' + esc(me.displayName) + ' (' + esc(O.ROLE_LABELS[me.role]) + ').',
+        actions: '<a class="btn" href="teams.html?tab=chat">' + U.icon('teams') + '<span>Approve from Teams</span></a>',
+        subtitle: 'New goals, target and weight changes, and closures that need sign-off. You are acting as ' + esc(me.displayName) + ' (' + esc(O.ROLE_LABELS[me.role]) + ').',
       }) +
       '<section id="tabs"><div class="tablist" role="tablist" aria-label="Approval views">' + tab('mine', 'Waiting for me', mine.length) + tab('pending', 'All pending', pending.length) + tab('decided', 'Decided', decided.length) + tab('requested', 'My requests', requested.length) + '</div>' +
-      panel('mine', (mine.length ? '' : '<p class="muted">Approvals are routed by level: goals to Executives, objectives to the VDO, key results to the department coordinator. Try “View as” another role.</p>') + table(mine, true, 'Nothing is waiting for your decision.')) +
+      panel('mine', (mine.length ? '' : '<p class="muted">' + (O.db.config.permissions.approvalRouting === 'Manager' ? 'Approvals go to the requester’s line manager.' : 'Approvals are routed by level: company goals to Executives, objectives to the VDO, key results to the department coordinator; individual goals go to the line manager.') + ' Try “View as” another role. The routing is set in Administration › Permissions.</p>') + table(mine, true, 'Nothing is waiting for your decision.')) +
       panel('pending', table(pending, false, 'No pending requests.')) +
       panel('decided', table(decided, false, 'No decisions yet.')) +
       panel('requested', table(requested, false, 'You have not submitted any requests.')) + '</section>';

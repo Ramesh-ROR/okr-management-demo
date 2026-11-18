@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>OKR Explorer · OKR Management System</title>
+  <title>Goals &amp; OKRs · OKR Management System</title>
   <link rel="icon" href="assets/img/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="assets/css/styles.css">
 </head>
@@ -16,145 +16,182 @@
   (function () {
     'use strict';
     var O = window.OKR, U = O.ui, esc = O.esc;
-    var main = U.shell('explorer', 'OKR Explorer');
+    var main = U.shell('explorer', 'Goals & OKRs');
     if (!main) return;
+    var me = O.currentUser();
+    var $ = function (x) { return document.getElementById(x); };
 
     var all = O.cycleOkrs();
     var byId = {};
     all.forEach(function (o) { byId[o.id] = o; });
     var kids = O.childIndex(all);
     Object.keys(kids).forEach(function (k) { kids[k].sort(O.levelOrder); });
-    var roots = all.filter(function (o) { return !o.parentId || !byId[o.parentId]; });
+    var hasTeam = O.allReports(me.id).length > 0;
 
     var f = {
-      q: O.param('q') || '', level: O.param('level') || '', dept: O.param('dept') || '', status: O.param('status') || '',
-      owner: O.param('owner') || '', flag: O.param('flag') || '', view: O.param('view') === 'list' ? 'list' : 'tree',
+      scope: O.param('scope') || (me.role === 'Employee' ? 'mine' : 'all'), view: ['tree', 'list', 'people', 'feed'].indexOf(O.param('view')) >= 0 ? O.param('view') : 'tree',
+      q: O.param('q') || '', level: O.param('level') || '', dept: O.param('dept') || '', status: O.param('status') || '', owner: O.param('owner') || '',
+      label: O.param('label') || '', flag: O.param('flag') || '', min: O.param('min') || '', max: O.param('max') || '',
     };
+    if (f.scope === 'team' && !hasTeam) f.scope = 'all';
     var EXP_KEY = 'okrDemo.explorer.expanded';
-    var expanded = {};
+    var expanded = null;
     try { expanded = JSON.parse(sessionStorage.getItem(EXP_KEY) || 'null'); } catch (e) { expanded = null; }
-    if (!expanded) {
-      expanded = {};
-      all.forEach(function (o) { if (o.level === 'Goal' || o.level === 'Objective') expanded[o.id] = true; });
-    }
+    if (!expanded) { expanded = {}; all.forEach(function (o) { if (o.level === 'Goal' || o.level === 'Objective') expanded[o.id] = true; }); }
     function saveExpanded() { try { sessionStorage.setItem(EXP_KEY, JSON.stringify(expanded)); } catch (e) { /* ignore */ } }
 
-    var owners = O.db.users.filter(function (u) { return all.some(function (o) { return o.ownerId === u.id; }); })
-      .map(function (u) { return { value: u.id, label: u.displayName }; });
+    var ownerOpts = O.people().filter(function (u) { return all.some(function (o) { return o.ownerId === u.id; }); }).map(function (u) { return { value: u.id, label: u.displayName }; });
+    var canExport = O.can.exportData();
 
-    var head = U.pageHeader({
-      title: 'OKR Explorer',
-      subtitle: 'Goals → objectives → key results → initiatives → action items for ' + esc(O.periodLabel()),
-      actions: '<button type="button" class="btn" id="export">' + U.icon('download') + '<span>Export CSV</span></button>' +
-        (O.can.create() ? '<a class="btn btn-primary" href="okr-edit.html">' + U.icon('plus') + '<span>New OKR</span></a>' : ''),
-    });
-    var filters = '<form class="filters" id="filters" role="search" aria-label="Filter OKRs">' +
+    main.innerHTML = U.pageHeader({
+      title: 'Goals & OKRs',
+      subtitle: 'Company goals cascade to objectives, key results, initiatives and actions; individual goals align to them. ' + esc(O.periodLabel()) + '.',
+      actions: '<button type="button" class="btn" id="export-xlsx"' + (canExport ? '' : ' disabled title="Your role cannot export – see Administration › Permissions"') + '>' + U.icon('download') + '<span>Export to Excel</span></button>' +
+        '<button type="button" class="btn btn-subtle" id="export-csv"' + (canExport ? '' : ' disabled') + '>CSV</button>' +
+        (O.can.create() ? '<a class="btn" href="import.html">' + U.icon('upload') + '<span>Import</span></a><a class="btn btn-primary" href="okr-edit.html">' + U.icon('plus') + '<span>New goal</span></a>' : ''),
+    }) +
+    '<div class="tablist scope-tabs" role="tablist" aria-label="Whose goals">' +
+      '<button type="button" role="tab" data-scope="mine">My goals<span class="tab-count">' + O.myGoals(all).length + '</span></button>' +
+      (hasTeam ? '<button type="button" role="tab" data-scope="team">My team<span class="tab-count">' + O.teamGoals(all).length + '</span></button>' : '') +
+      '<button type="button" role="tab" data-scope="all">All goals<span class="tab-count">' + all.length + '</span></button></div>' +
+    '<form class="filters" id="filters" role="search" aria-label="Filter goals">' +
       '<label class="field field-grow"><span class="field-label">Search</span><input type="search" id="f-q" value="' + esc(f.q) + '" placeholder="Title or code"></label>' +
-      '<label class="field"><span class="field-label">Level</span><select id="f-level">' + U.selectOptions(O.LEVELS.map(function (l) { return { value: l, label: O.LEVEL_LABELS[l] }; }), f.level, 'All levels') + '</select></label>' +
+      '<label class="field"><span class="field-label">Goal type</span><select id="f-level">' + U.selectOptions(O.ALL_LEVELS.map(function (l) { return { value: l, label: O.LEVEL_LABELS[l] }; }), f.level, 'All types') + '</select></label>' +
       '<label class="field"><span class="field-label">Department</span><select id="f-dept">' + U.selectOptions(O.db.departments.map(function (d) { return { value: d.id, label: d.name }; }), f.dept, 'All departments') + '</select></label>' +
       '<label class="field"><span class="field-label">Status</span><select id="f-status">' + U.selectOptions(O.STATUSES.map(function (s) { return { value: s, label: O.STATUS[s].label }; }), f.status, 'All statuses') + '</select></label>' +
-      '<label class="field"><span class="field-label">Owner</span><select id="f-owner">' + U.selectOptions(owners, f.owner, 'Anyone') + '</select></label>' +
+      '<label class="field"><span class="field-label">Owner</span><select id="f-owner">' + U.selectOptions(ownerOpts, f.owner, 'Anyone') + '</select></label>' +
+      '<label class="field"><span class="field-label">Label</span><select id="f-label">' + U.selectOptions((O.db.config.labels || []).map(function (l) { return { value: l.id, label: l.name }; }), f.label, 'Any label') + '</select></label>' +
       '<label class="field"><span class="field-label">Flag</span><select id="f-flag">' + U.selectOptions([
         { value: 'attention', label: 'Needs attention (any)' }, { value: 'overdue', label: 'Overdue' }, { value: 'stale', label: 'No recent check-in' },
-        { value: 'due', label: 'Due soon' }, { value: 'approval', label: 'Pending approval' }], f.flag, 'No flag filter') + '</select></label>' +
-      '<fieldset class="field" style="padding:4px 8px"><legend class="sr-only">View</legend><div class="radio-row">' +
-      '<label><input type="radio" name="view" value="tree"' + (f.view === 'tree' ? ' checked' : '') + '> Tree</label>' +
-      '<label><input type="radio" name="view" value="list"' + (f.view === 'list' ? ' checked' : '') + '> Flat list</label></div></fieldset>' +
-      '<button type="button" class="btn btn-subtle" id="clear">Clear filters</button></form>';
-    main.innerHTML = head + filters + '<div class="row" style="justify-content:space-between;margin-block-end:8px"><p class="muted" id="count" aria-live="polite" style="margin:0"></p>' +
+        { value: 'due', label: 'Due soon' }, { value: 'approval', label: 'Pending approval / draft' }, { value: 'synced', label: 'Updated automatically' }, { value: 'private', label: 'Private / department only' }], f.flag, 'No flag filter') + '</select></label>' +
+      '<fieldset class="field range-field"><legend class="field-label">Progress %</legend><div class="row nowrap"><label class="sr-only" for="f-min">Minimum progress</label><input type="number" id="f-min" min="0" max="100" placeholder="Min" value="' + esc(f.min) + '">' +
+      '<span aria-hidden="true">–</span><label class="sr-only" for="f-max">Maximum progress</label><input type="number" id="f-max" min="0" max="100" placeholder="Max" value="' + esc(f.max) + '"></div></fieldset>' +
+      '<button type="button" class="btn btn-subtle" id="clear">Clear filters</button></form>' +
+    '<div class="row" style="justify-content:space-between;margin-block-end:8px"><div class="segmented" role="group" aria-label="View">' +
+      ['tree', 'list', 'people', 'feed'].map(function (v) { return '<button type="button" class="seg" data-view="' + v + '" aria-pressed="' + (f.view === v) + '">' + { tree: 'Tree', list: 'List', people: 'People', feed: 'Feed' }[v] + '</button>'; }).join('') +
+      '</div><p class="muted" id="count" aria-live="polite" style="margin:0"></p>' +
       '<div class="row" id="tree-tools"><button type="button" class="btn btn-sm btn-subtle" id="expand-all">Expand all</button><button type="button" class="btn btn-sm btn-subtle" id="collapse-all">Collapse all</button></div></div>' +
-      '<div class="card" style="padding:0"><div class="table-wrap" id="table"></div></div>';
+    '<div id="results"></div>';
 
-    function filtersActive() { return !!(f.q || f.level || f.dept || f.status || f.owner || f.flag); }
+    function inScope(o) {
+      if (f.scope === 'mine') return O.owns(o, me.id);
+      if (f.scope === 'team') return O.teamGoals([o]).length > 0;
+      return true;
+    }
+    function filtersActive() { return !!(f.q || f.level || f.dept || f.status || f.owner || f.label || f.flag || f.min || f.max || f.scope !== 'all'); }
     function matches(o) {
-      if (f.q) {
-        var q = f.q.toLowerCase();
-        if (o.title.toLowerCase().indexOf(q) < 0 && o.code.toLowerCase().indexOf(q) < 0) return false;
-      }
+      if (!inScope(o)) return false;
+      if (f.q) { var q = f.q.toLowerCase(); if (o.title.toLowerCase().indexOf(q) < 0 && o.code.toLowerCase().indexOf(q) < 0) return false; }
       if (f.level && o.level !== f.level) return false;
       if (f.dept && o.departmentId !== f.dept) return false;
       if (f.status && o.status !== f.status) return false;
-      if (f.owner && o.ownerId !== f.owner) return false;
+      if (f.owner && !O.owns(o, f.owner)) return false;
+      if (f.label && (o.labels || []).indexOf(f.label) < 0) return false;
+      if (f.min !== '' && o.progress < Number(f.min)) return false;
+      if (f.max !== '' && o.progress > Number(f.max)) return false;
       if (f.flag === 'attention' && !(O.isOverdue(o) || O.isStale(o) || O.isDueSoon(o))) return false;
       if (f.flag === 'overdue' && !O.isOverdue(o)) return false;
       if (f.flag === 'stale' && !O.isStale(o)) return false;
       if (f.flag === 'due' && !O.isDueSoon(o)) return false;
       if (f.flag === 'approval' && o.approvalState === 'Approved') return false;
+      if (f.flag === 'synced' && !o.dataSource) return false;
+      if (f.flag === 'private' && (!o.visibility || o.visibility === 'Public')) return false;
       return true;
     }
     function weightCell(o) {
-      if (!o.parentId) return '<span class="muted">–</span>';
+      if (!o.parentId || !byId[o.parentId]) return '<span class="muted">–</span>';
+      if (!O.countsInRollup(o)) return '<span class="muted small" data-tip="Aligned only – does not count in the parent’s progress">aligned</span>';
       var share = O.weightShare(o);
-      return '<span data-tip="' + esc('Weight ' + o.weight + ' = ' + Math.round(share) + '% of ' + (byId[o.parentId] ? byId[o.parentId].code : 'parent') + '’s progress') + '">' + Math.round(share) + '%</span>';
+      return '<span data-tip="' + esc('Weight ' + o.weight + ' = ' + Math.round(share) + '% of ' + byId[o.parentId].code + '’s progress') + '">' + Math.round(share) + '%</span>';
     }
     function rowHtml(o, depth, opts) {
       var hasKids = (kids[o.id] || []).length > 0;
-      var toggle = opts.tree
-        ? (hasKids ? '<button type="button" class="tree-toggle" data-toggle="' + esc(o.id) + '" aria-expanded="' + (opts.open ? 'true' : 'false') + '" aria-label="' + (opts.open ? 'Collapse ' : 'Expand ') + esc(o.code) + '">' + U.icon('chevron') + '</button>' : '<span class="tree-spacer"></span>')
-        : '';
-      var u = O.user(o.ownerId);
+      var toggle = opts.tree ? (hasKids ? '<button type="button" class="tree-toggle" data-toggle="' + esc(o.id) + '" aria-expanded="' + (opts.open ? 'true' : 'false') + '" aria-label="' + (opts.open ? 'Collapse ' : 'Expand ') + esc(o.code) + '">' + U.icon('chevron') + '</button>' : '<span class="tree-spacer"></span>') : '';
       var d = O.dept(o.departmentId);
       return '<tr class="lvl-row-' + o.level + (opts.dimmed ? ' dimmed' : '') + '">' +
-        '<td class="cell-title"><div class="tree-cell" style="padding-inline-start:' + (depth * 22) + 'px">' + toggle + U.levelChip(o.level) + ' ' + U.okrLink(o) + '</div></td>' +
-        '<td class="nowrap">' + U.avatar(o.ownerId, 24) + ' <span class="small">' + esc(u ? u.displayName : '–') + '</span></td>' +
+        '<td class="cell-title"><div class="tree-cell" style="padding-inline-start:' + (depth * 22) + 'px">' + toggle + U.levelChip(o.level) + ' <span>' + U.okrLink(o) + ' ' + U.visibilityChip(o) + '<span class="row-labels">' + U.labelChips(o) + '</span></span></div></td>' +
+        '<td class="nowrap small">' + U.avatar(o.ownerId, 24) + ' ' + esc((O.user(o.ownerId) || {}).displayName || '–') + ((o.coOwnerIds || []).length ? ' <span class="muted" title="Co-owners: ' + esc(o.coOwnerIds.map(function (c) { return (O.user(c) || {}).displayName; }).join(', ')) + '">+' + o.coOwnerIds.length + '</span>' : '') + '</td>' +
         '<td class="small" title="' + esc(d ? d.name : '') + '">' + esc(d ? d.code : '–') + '</td>' +
-        '<td style="min-inline-size:150px">' + U.progress(o.progress, o.status, o.code) + '</td>' +
-        '<td>' + U.statusBadge(o.status) + '</td>' +
-        '<td class="num">' + weightCell(o) + '</td>' +
-        '<td class="nowrap small">' + O.fmtDate(o.dueDate) + '</td>' +
-        '<td>' + U.flagChips(o) + '</td></tr>';
+        '<td style="min-inline-size:150px">' + U.progress(o.progress, o.status, o.code) + '</td><td>' + U.statusBadge(o.status) + '</td>' +
+        '<td class="num">' + weightCell(o) + '</td><td class="nowrap small">' + O.fmtDate(o.dueDate) + '</td><td>' + U.flagChips(o) + ' ' + U.sourceChip(o) + '</td></tr>';
+    }
+    function table(rows, labelText) {
+      return '<div class="card" style="padding:0"><div class="table-wrap"><table class="data" aria-label="' + labelText + '"><thead><tr><th scope="col">Goal</th><th scope="col">Owner</th><th scope="col">Dept</th><th scope="col">Progress</th><th scope="col">Status</th><th scope="col" class="num">Weight</th><th scope="col">Due</th><th scope="col">Flags</th></tr></thead><tbody>' + rows.join('') + '</tbody></table></div></div>';
+    }
+
+    function renderTree(hits) {
+      var hitIds = {}, keep = {}, rows = [];
+      hits.forEach(function (o) { hitIds[o.id] = true; var c = o; while (c) { keep[c.id] = true; c = byId[c.parentId]; } });
+      var active = filtersActive();
+      var walk = function (o, depth) {
+        if (!keep[o.id]) return;
+        var open = active ? (kids[o.id] || []).some(function (k) { return keep[k.id]; }) : !!expanded[o.id];
+        rows.push(rowHtml(o, depth, { tree: true, open: open, dimmed: active && !hitIds[o.id] }));
+        if (open) (kids[o.id] || []).forEach(function (k) { walk(k, depth + 1); });
+      };
+      all.filter(function (o) { return !o.parentId || !byId[o.parentId]; }).forEach(function (r) { walk(r, 0); });
+      return rows.length ? table(rows, 'Goal hierarchy') : '';
+    }
+    function renderPeople(hits) {
+      var groups = {};
+      hits.forEach(function (o) { (groups[o.ownerId] = groups[o.ownerId] || []).push(o); });
+      var ids = Object.keys(groups).sort(function (a, b) { return groups[b].length - groups[a].length; });
+      return '<div class="people-grid">' + ids.map(function (uid) {
+        var u = O.user(uid), list = groups[uid], c = O.countByStatus(list);
+        return '<section class="card person-card" aria-label="' + esc(u.displayName) + '"><div class="row nowrap" style="align-items:flex-start">' + U.avatar(uid, 40) + '<div style="flex:1;min-inline-size:0"><strong>' + esc(u.displayName) + '</strong><div class="small muted">' + esc(u.jobTitle) + '</div></div>' +
+          '<a class="btn btn-sm btn-subtle" href="people.html?user=' + uid + '">Profile</a></div>' +
+          '<div class="row small" style="margin-block:10px">' + list.length + ' goals · avg ' + O.pct(O.avg(list, function (o) { return o.progress; })) + ' · ' +
+          ['OnTrack', 'AtRisk', 'OffTrack', 'Completed'].filter(function (s) { return c[s]; }).map(function (s) { return '<span class="badge status-' + s + '"><span class="glyph" aria-hidden="true">' + O.STATUS[s].glyph + '</span>' + c[s] + '</span>'; }).join(' ') + '</div>' +
+          '<ul class="list compact">' + list.slice(0, 6).map(function (o) { return '<li><div class="list-main">' + U.okrLink(o) + '</div><div style="inline-size:120px">' + U.progress(o.progress, o.status, o.code) + '</div></li>'; }).join('') +
+          (list.length > 6 ? '<li class="small muted">+' + (list.length - 6) + ' more</li>' : '') + '</ul></section>';
+      }).join('') + '</div>';
+    }
+    function renderFeed(hits) {
+      var items = O.feed(hits, 60);
+      if (!items.length) return U.empty('No updates yet for these goals.');
+      return '<div class="card"><ul class="feed">' + items.map(function (e) {
+        var u = O.user(e.by), who = '<strong>' + esc(u ? u.displayName : 'Someone') + '</strong>', text;
+        if (e.kind === 'checkin') text = who + ' checked in on ' + U.okrLink(e.okr) + ': ' + esc(O.fmtValue(e.okr, e.data.value)) + ' · ' + O.pct(e.data.progress) + ' ' + U.statusBadge(e.data.status) + (e.data.narrative ? '<div class="feed-quote">“' + esc(e.data.narrative) + '”</div>' : '');
+        else if (e.kind === 'comment') text = who + ' commented on ' + U.okrLink(e.okr) + (e.data.private ? ' <span class="chip vis-chip">' + U.icon('lock') + 'Private</span>' : '') + '<div class="feed-quote">“' + esc(e.data.text) + '”</div>';
+        else text = who + ' · ' + U.okrLink(e.okr) + ' – ' + esc(e.data.details);
+        return '<li>' + U.avatar(e.by, 32) + '<div><div>' + text + '</div><div class="small muted">' + O.fmtDateTime(e.at) + ' · ' + O.fmtRelative(e.at) + '</div></div></li>';
+      }).join('') + '</ul></div>';
     }
 
     function render() {
-      var active = filtersActive();
       var hits = all.filter(matches);
-      var rows = [];
-      if (f.view === 'list') {
-        hits.forEach(function (o) { rows.push(rowHtml(o, 0, { tree: false })); });
-      } else {
-        var hitIds = {};
-        hits.forEach(function (o) { hitIds[o.id] = true; });
-        var keep = {};
-        hits.forEach(function (o) { var c = o; while (c) { keep[c.id] = true; c = byId[c.parentId]; } });
-        var walk = function (o, depth) {
-          if (!keep[o.id]) return;
-          var open = active ? (kids[o.id] || []).some(function (k) { return keep[k.id]; }) : !!expanded[o.id];
-          rows.push(rowHtml(o, depth, { tree: true, open: open, dimmed: active && !hitIds[o.id] }));
-          if (open) (kids[o.id] || []).forEach(function (k) { walk(k, depth + 1); });
-        };
-        roots.forEach(function (r) { walk(r, 0); });
-      }
-      document.getElementById('table').innerHTML = rows.length
-        ? '<table class="data"' + (f.view === 'tree' ? ' aria-label="OKR hierarchy"' : ' aria-label="OKR list"') + '><thead><tr><th scope="col">Item</th><th scope="col">Owner</th><th scope="col">Dept</th><th scope="col">Progress</th><th scope="col">Status</th><th scope="col" class="num">Weight</th><th scope="col">Due</th><th scope="col">Flags</th></tr></thead><tbody>' + rows.join('') + '</tbody></table>'
-        : U.empty('No items match these filters. <button type="button" class="linklike" id="clear2">Clear filters</button>');
-      document.getElementById('count').textContent = active ? 'Showing ' + hits.length + ' matching items of ' + all.length + (f.view === 'tree' ? ' (with their parents for context)' : '') : all.length + ' items';
-      document.getElementById('tree-tools').hidden = f.view !== 'tree' || active;
-      var c2 = document.getElementById('clear2');
+      var html = '';
+      if (f.view === 'tree') html = renderTree(hits);
+      else if (f.view === 'list') html = hits.length ? table(hits.map(function (o) { return rowHtml(o, 0, { tree: false }); }), 'Goal list') : '';
+      else if (f.view === 'people') html = hits.length ? renderPeople(hits) : '';
+      else html = renderFeed(hits);
+      $('results').innerHTML = html || U.empty('No goals match. <button type="button" class="linklike" id="clear2">Clear filters</button>' + (f.scope === 'mine' && O.can.create('Personal') ? ' or <a href="okr-edit.html?level=Personal">create an individual goal</a>' : '') + '.');
+      $('count').textContent = (filtersActive() ? 'Showing ' + hits.length + ' of ' + all.length + ' goals' : all.length + ' goals') + (f.view === 'tree' && filtersActive() ? ' (parents shown for context)' : '');
+      $('tree-tools').hidden = f.view !== 'tree' || filtersActive();
+      document.querySelectorAll('[data-scope]').forEach(function (t) { t.setAttribute('aria-selected', t.getAttribute('data-scope') === f.scope ? 'true' : 'false'); });
+      document.querySelectorAll('[data-view]').forEach(function (b) { b.setAttribute('aria-pressed', b.getAttribute('data-view') === f.view ? 'true' : 'false'); });
+      var c2 = $('clear2');
       if (c2) c2.addEventListener('click', clear);
-      syncUrl();
-    }
-    function syncUrl() {
       var url = new URL(window.location.href);
-      ['q', 'level', 'dept', 'status', 'owner', 'flag'].forEach(function (k) { if (f[k]) url.searchParams.set(k, f[k]); else url.searchParams.delete(k); });
-      if (f.view === 'list') url.searchParams.set('view', 'list'); else url.searchParams.delete('view');
+      Object.keys(f).forEach(function (k) { if (f[k] && !(k === 'view' && f[k] === 'tree')) url.searchParams.set(k, f[k]); else url.searchParams.delete(k); });
+      url.searchParams.delete('as');
       try { history.replaceState(null, '', url.toString()); } catch (e) { /* ignore */ }
     }
+    var ids = { 'f-q': 'q', 'f-level': 'level', 'f-dept': 'dept', 'f-status': 'status', 'f-owner': 'owner', 'f-label': 'label', 'f-flag': 'flag', 'f-min': 'min', 'f-max': 'max' };
     function clear() {
-      f.q = f.level = f.dept = f.status = f.owner = f.flag = '';
-      ['f-q', 'f-level', 'f-dept', 'f-status', 'f-owner', 'f-flag'].forEach(function (id) { document.getElementById(id).value = ''; });
-      var g = document.getElementById('global-search');
+      Object.keys(ids).forEach(function (id) { f[ids[id]] = ''; $(id).value = ''; });
+      var g = $('global-search');
       if (g) g.value = '';
       render();
     }
-
-    var map = { 'f-q': 'q', 'f-level': 'level', 'f-dept': 'dept', 'f-status': 'status', 'f-owner': 'owner', 'f-flag': 'flag' };
-    Object.keys(map).forEach(function (id) {
-      document.getElementById(id).addEventListener(id === 'f-q' ? 'input' : 'change', function (e) { f[map[id]] = e.target.value; render(); });
+    Object.keys(ids).forEach(function (id) {
+      $(id).addEventListener(/f-q|f-min|f-max/.test(id) ? 'input' : 'change', function (e) { f[ids[id]] = e.target.value; render(); });
     });
-    document.getElementById('filters').addEventListener('submit', function (e) { e.preventDefault(); });
-    document.querySelectorAll('input[name="view"]').forEach(function (r) { r.addEventListener('change', function () { f.view = r.value; render(); }); });
-    document.getElementById('clear').addEventListener('click', clear);
-    document.getElementById('table').addEventListener('click', function (e) {
+    $('filters').addEventListener('submit', function (e) { e.preventDefault(); });
+    $('clear').addEventListener('click', clear);
+    document.querySelectorAll('[data-scope]').forEach(function (t) { t.addEventListener('click', function () { f.scope = t.getAttribute('data-scope'); render(); }); });
+    document.querySelectorAll('[data-view]').forEach(function (b) { b.addEventListener('click', function () { f.view = b.getAttribute('data-view'); render(); }); });
+    $('results').addEventListener('click', function (e) {
       var b = e.target.closest('[data-toggle]');
       if (!b) return;
       var id = b.getAttribute('data-toggle');
@@ -164,32 +201,43 @@
       var again = document.querySelector('[data-toggle="' + CSS.escape(id) + '"]');
       if (again) again.focus();
     });
-    document.getElementById('expand-all').addEventListener('click', function () { all.forEach(function (o) { expanded[o.id] = true; }); saveExpanded(); render(); });
-    document.getElementById('collapse-all').addEventListener('click', function () { expanded = {}; saveExpanded(); render(); });
-    document.getElementById('export').addEventListener('click', function () {
+    $('expand-all').addEventListener('click', function () { all.forEach(function (o) { expanded[o.id] = true; }); saveExpanded(); render(); });
+    $('collapse-all').addEventListener('click', function () { expanded = {}; saveExpanded(); render(); });
+
+    var columns = [
+      { label: 'Code', value: function (o) { return o.code; }, width: 10 },
+      { label: 'Goal type', value: function (o) { return O.LEVEL_LABELS[o.level]; }, width: 14 },
+      { label: 'Title', value: function (o) { return o.title; }, width: 60 },
+      { label: 'Parent', value: function (o) { var p = O.okr(o.parentId); return p ? p.code : ''; }, width: 10 },
+      { label: 'Owner', value: function (o) { var u = O.user(o.ownerId); return u ? u.displayName : ''; }, width: 20 },
+      { label: 'Co-owners', value: function (o) { return (o.coOwnerIds || []).map(function (c) { return (O.user(c) || {}).displayName; }).join('; '); }, width: 20 },
+      { label: 'Department', value: function (o) { var d = O.dept(o.departmentId); return d ? d.name : ''; }, width: 24 },
+      { label: 'Labels', value: function (o) { return (o.labels || []).map(function (l) { return (O.label(l) || {}).name; }).join('; '); }, width: 20 },
+      { label: 'Measured as', value: function (o) { return O.MEASUREMENT_LABELS[o.measurementType]; }, width: 22 },
+      { label: 'Current', value: function (o) { return o.measurementType === 'RolledUp' ? '' : Number(o.current); }, width: 12 },
+      { label: 'Target', value: function (o) { return o.measurementType === 'RolledUp' ? '' : Number(o.target); }, width: 12 },
+      { label: 'Unit', value: function (o) { return o.measurementType === 'RolledUp' ? '%' : o.unit; }, width: 10 },
+      { label: 'Progress %', value: function (o) { return Math.round(o.progress); }, width: 11 },
+      { label: 'Status', value: function (o) { return O.STATUS[o.status].label; }, width: 12 },
+      { label: 'Weight', value: function (o) { return Number(o.weight); }, width: 8 },
+      { label: 'Visibility', value: function (o) { return o.visibility; }, width: 12 },
+      { label: 'Start', value: function (o) { return o.startDate; }, width: 12 },
+      { label: 'Due', value: function (o) { return o.dueDate; }, width: 12 },
+      { label: 'Last check-in', value: function (o) { return o.lastCheckInOn ? o.lastCheckInOn.slice(0, 10) : ''; }, width: 14 },
+      { label: 'Data source', value: function (o) { var c = o.dataSource && O.connection(o.dataSource.connectionId); return c ? c.name : 'Manual'; }, width: 24 },
+      { label: 'Flags', value: function (o) { return O.flags(o).join('; '); }, width: 20 },
+    ];
+    $('export-xlsx').addEventListener('click', function () {
       var rows = all.filter(matches);
-      var csv = O.toCsv(rows, [
-        { label: 'Code', value: function (o) { return o.code; } },
-        { label: 'Level', value: function (o) { return O.LEVEL_LABELS[o.level]; } },
-        { label: 'Title', value: function (o) { return o.title; } },
-        { label: 'Parent', value: function (o) { var p = O.okr(o.parentId); return p ? p.code : ''; } },
-        { label: 'Owner', value: function (o) { var u = O.user(o.ownerId); return u ? u.displayName : ''; } },
-        { label: 'Department', value: function (o) { var d = O.dept(o.departmentId); return d ? d.name : ''; } },
-        { label: 'Progress %', value: function (o) { return Math.round(o.progress); } },
-        { label: 'Status', value: function (o) { return O.STATUS[o.status].label; } },
-        { label: 'Baseline', value: function (o) { return o.measurementType === 'RolledUp' ? '' : o.baseline; } },
-        { label: 'Current', value: function (o) { return o.measurementType === 'RolledUp' ? '' : o.current; } },
-        { label: 'Target', value: function (o) { return o.measurementType === 'RolledUp' ? '' : o.target; } },
-        { label: 'Unit', value: function (o) { return o.measurementType === 'RolledUp' ? '' : o.unit; } },
-        { label: 'Weight', value: function (o) { return o.weight; } },
-        { label: 'Start', value: function (o) { return o.startDate; } },
-        { label: 'Due', value: function (o) { return o.dueDate; } },
-        { label: 'Last check-in', value: function (o) { return o.lastCheckInOn ? o.lastCheckInOn.slice(0, 10) : ''; } },
-        { label: 'Flags', value: function (o) { return O.flags(o).join('; '); } },
-      ]);
-      O.downloadCsv('okr-explorer-' + O.prefs.period + '.csv', csv);
-      O.logExport('OKR Explorer list');
-      U.toast('Exported ' + rows.length + ' items to CSV', 'success');
+      O.downloadXlsx('okr-goals-' + O.currentCycle().id + '-' + O.prefs.period + '.xlsx', 'Goals ' + O.currentCycle().name, rows, columns);
+      O.logExport('Goals list', 'Excel');
+      U.toast('Exported ' + rows.length + ' goals to Excel', 'success');
+    });
+    $('export-csv').addEventListener('click', function () {
+      var rows = all.filter(matches);
+      O.downloadCsv('okr-goals-' + O.currentCycle().id + '-' + O.prefs.period + '.csv', O.toCsv(rows, columns));
+      O.logExport('Goals list', 'CSV');
+      U.toast('Exported ' + rows.length + ' goals to CSV', 'success');
     });
     render();
   })();

@@ -62,7 +62,8 @@
       '<label class="field"><span class="field-label">Department</span><select id="o-dept">' + U.selectOptions(O.db.departments.map(function (d) { return { value: d.id, label: d.name }; }), '', 'All departments') + '</select></label>' +
       '<label class="field"><span class="field-label">Level</span><select id="o-level">' + U.selectOptions(['KeyResult', 'Initiative', 'ActionItem'].map(function (l) { return { value: l, label: O.LEVEL_LABELS[l] }; }), '', 'Key results, initiatives and actions') + '</select></label>' +
       '<label class="field"><span class="field-label">Status</span><select id="o-status">' + U.selectOptions(O.STATUSES.map(function (s) { return { value: s, label: O.STATUS[s].label }; }), '', 'All statuses') + '</select></label>' +
-      '<button type="button" class="btn" id="ops-export">' + U.icon('download') + '<span>Export CSV</span></button></form>' +
+      '<button type="button" class="btn" id="ops-xlsx"' + (O.can.exportData() ? '' : ' disabled title="Your role cannot export"') + '>' + U.icon('download') + '<span>Export to Excel</span></button>' +
+      '<button type="button" class="btn btn-subtle" id="ops-export"' + (O.can.exportData() ? '' : ' disabled') + '>CSV</button></form>' +
       '<p class="muted" id="ops-count" aria-live="polite"></p><div class="card" style="padding:0"><div class="table-wrap" id="ops-table"></div></div>';
 
     // ---------------- compliance
@@ -115,6 +116,27 @@
         }).join('') + '</tbody></table>' : U.empty('No items match.');
     }
     ['o-dept', 'o-level', 'o-status'].forEach(function (x) { $(x).addEventListener('change', renderOps); });
+    var opsColumns = [
+      { label: 'Code', value: function (o) { return o.code; }, width: 10 },
+      { label: 'Goal type', value: function (o) { return O.LEVEL_LABELS[o.level]; }, width: 14 },
+      { label: 'Title', value: function (o) { return o.title; }, width: 60 },
+      { label: 'Department', value: function (o) { return (O.dept(o.departmentId) || {}).name || ''; }, width: 24 },
+      { label: 'Owner', value: function (o) { return (O.user(o.ownerId) || {}).displayName || ''; }, width: 20 },
+      { label: 'Current', value: function (o) { return o.measurementType === 'RolledUp' ? '' : Number(o.current); }, width: 12 },
+      { label: 'Target', value: function (o) { return o.measurementType === 'RolledUp' ? '' : Number(o.target); }, width: 12 },
+      { label: 'Unit', value: function (o) { return o.measurementType === 'RolledUp' ? '%' : o.unit; }, width: 10 },
+      { label: 'Progress %', value: function (o) { return Math.round(o.progress); }, width: 11 },
+      { label: 'Status', value: function (o) { return O.STATUS[o.status].label; }, width: 12 },
+      { label: 'Last update', value: function (o) { return o.lastCheckInOn ? o.lastCheckInOn.slice(0, 10) : ''; }, width: 13 },
+      { label: 'Due', value: function (o) { return o.dueDate; }, width: 12 },
+      { label: 'Flags', value: function (o) { return O.flags(o).join('; '); }, width: 20 },
+    ];
+    $('ops-xlsx').addEventListener('click', function () {
+      var rows = opsRows();
+      O.downloadXlsx('okr-operational-report-' + O.prefs.period + '.xlsx', 'Operational ' + O.currentCycle().name, rows, opsColumns);
+      O.logExport('Operational report', 'Excel');
+      U.toast('Exported ' + rows.length + ' rows to Excel', 'success');
+    });
     $('ops-export').addEventListener('click', function () {
       var rows = opsRows();
       O.downloadCsv('okr-operational-report-' + O.prefs.period + '.csv', O.toCsv(rows, [

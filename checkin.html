@@ -23,83 +23,102 @@
     var me = O.currentUser();
     var $ = function (x) { return document.getElementById(x); };
 
-    if (id && !o) { main.innerHTML = U.pageHeader({ title: 'Item not found' }) + U.empty('<a href="checkin.html">Back to check-ins</a>'); return; }
+    if (id && !o) { main.innerHTML = U.pageHeader({ title: 'Goal not found' }) + U.empty('<a href="checkin.html">Back to check-ins</a>'); return; }
+    if (o && o.measurementType === 'Tasks') { window.location.replace('okr.html?id=' + encodeURIComponent(o.id) + '&tab=tasks'); return; }
     if (o) { form(); return; }
     list();
 
-    // ------------------------------------------------------------ list of items to update
     function list() {
-      var scope = O.param('scope') === 'all' ? 'all' : 'mine';
+      var scope = O.param('scope') || 'mine';
       var showDone = O.param('done') === '1';
-      var mineOrDept = O.cycleOkrs().filter(O.can.checkIn);
-      var rows = mineOrDept.filter(function (x) { return (scope === 'all' || x.ownerId === me.id) && (showDone || x.status !== 'Completed'); });
-      var rank = function (x) { return O.isOverdue(x) ? 0 : O.isStale(x) ? 1 : O.isDueSoon(x) ? 2 : 3; };
-      rows.sort(function (a, b) { return rank(a) - rank(b) || a.progress - b.progress; });
-      var cadenceDays = O.db.config.reminders.checkInCadence === 'Monthly' ? 30 : O.db.config.reminders.checkInCadence === 'Fortnightly' ? 14 : 7;
-      var leaves = mineOrDept.filter(function (x) { return x.measurementType !== 'RolledUp' && x.status !== 'Completed'; });
+      var updatable = O.cycleOkrs().filter(O.can.checkIn);
+      var scoped = updatable.filter(function (x) {
+        if (scope === 'mine') return O.owns(x, me.id);
+        if (scope === 'team') return O.isManagerOf(me.id, x.ownerId);
+        return true;
+      }).filter(function (x) { return showDone || x.status !== 'Completed'; });
+      var rank = function (x) { return O.isOverdue(x) ? 0 : O.isStale(x) ? 1 : O.isDueSoon(x) ? 2 : x.dataSource ? 4 : 3; };
+      scoped.sort(function (a, b) { return rank(a) - rank(b) || a.progress - b.progress; });
+      var r = O.db.config.reminders, mp = O.myPrefs();
+      var cadenceDays = (mp.reminderFrequency || r.checkInCadence) === 'Monthly' ? 30 : (mp.reminderFrequency || r.checkInCadence) === 'Weekly' ? 7 : 14;
+      var leaves = updatable.filter(function (x) { return x.measurementType !== 'RolledUp' && x.status !== 'Completed' && !x.dataSource; });
       var due = leaves.filter(function (x) { var d = O.daysSince(x.lastCheckInOn); return d === null || d >= cadenceDays; }).length;
-      var thisWeek = O.db.checkins.filter(function (c) { return O.daysSince(c.date) < 7 && mineOrDept.some(function (x) { return x.id === c.okrId; }); }).length;
+      var thisWeek = O.db.checkins.filter(function (c) { return O.daysSince(c.date) < 7 && updatable.some(function (x) { return x.id === c.okrId; }); }).length;
+      var hasTeam = O.directReports(me.id).length > 0;
 
       main.innerHTML = U.pageHeader({
         title: 'Check-in',
-        subtitle: 'Update progress, status and blockers. Cadence: ' + esc(O.db.config.reminders.checkInCadence.toLowerCase()) + ', reminders on ' + esc(O.db.config.reminders.reminderDay) + '.',
+        subtitle: 'Update progress, status and blockers. Your reminders: ' + esc((mp.reminderFrequency || r.interval || r.checkInCadence).toLowerCase()) + ' on ' + esc(r.reminderDay) + ' at ' + esc(r.checkInTime || '09:00') + ' via ' + esc(channelText(mp.channels || r.channels)) + ' · <a href="notifications.html?tab=prefs">change</a>',
+        actions: '<a class="btn" href="teams.html">' + U.icon('teams') + '<span>Check in from Teams</span></a>',
       }) +
       '<div class="grid grid-kpi" style="margin-block-end:20px">' +
-        U.kpi('Items you can update', mineOrDept.length, me.role === 'OkrChampion' || me.role === 'DepartmentCoordinator' ? 'Owned by you or in ' + esc(O.dept(me.departmentId).name) : 'Owned by you') +
+        U.kpi('Goals you can update', updatable.length, 'Owned, co-owned, your team’s or your department’s') +
         U.kpi('Due for a check-in', due, 'No update in the last ' + cadenceDays + ' days', 'warn') +
-        U.kpi('Overdue items', mineOrDept.filter(O.isOverdue).length, 'Past due date and not complete', 'bad') +
-        U.kpi('Check-ins this week', thisWeek, 'Across the items above', 'info') + '</div>' +
-      '<form class="filters" id="scope-form" aria-label="Filter the list"><fieldset class="field" style="padding:6px 10px"><legend>Show</legend><div class="radio-row">' +
-        '<label><input type="radio" name="scope" value="mine"' + (scope === 'mine' ? ' checked' : '') + '> Items I own</label>' +
+        U.kpi('Overdue', updatable.filter(O.isOverdue).length, 'Past due date and not complete', 'bad') +
+        U.kpi('Updated automatically', updatable.filter(function (x) { return x.dataSource; }).length, 'From Power BI, Excel, APIs or Planner', 'info') +
+        U.kpi('Check-ins this week', thisWeek, 'Across the goals above') + '</div>' +
+      '<form class="filters" aria-label="Filter the list"><fieldset class="field" style="padding:6px 10px"><legend>Show</legend><div class="radio-row">' +
+        '<label><input type="radio" name="scope" value="mine"' + (scope === 'mine' ? ' checked' : '') + '> My goals</label>' +
+        (hasTeam ? '<label><input type="radio" name="scope" value="team"' + (scope === 'team' ? ' checked' : '') + '> My team’s goals</label>' : '') +
         '<label><input type="radio" name="scope" value="all"' + (scope === 'all' ? ' checked' : '') + '> Everything I can update</label></div></fieldset>' +
         '<label class="check" style="padding-block-end:8px"><input type="checkbox" id="done"' + (showDone ? ' checked' : '') + '> Include completed</label></form>' +
-      (rows.length
-        ? '<div class="card" style="padding:0"><div class="table-wrap"><table class="data"><caption class="sr-only">Items to check in on, most urgent first</caption><thead><tr><th scope="col">Item</th><th scope="col">Owner</th><th scope="col">Progress</th><th scope="col">Status</th><th scope="col">Last check-in</th><th scope="col">Due</th><th scope="col"><span class="sr-only">Action</span></th></tr></thead><tbody>' +
-          rows.map(function (x) {
-            return '<tr><td class="cell-title">' + U.levelChip(x.level) + ' ' + U.okrLink(x) + '<div>' + U.flagChips(x) + '</div></td><td class="nowrap small">' + esc((O.user(x.ownerId) || {}).displayName || '–') + '</td>' +
-              '<td style="min-inline-size:150px">' + U.progress(x.progress, x.status, x.code) + '</td><td>' + U.statusBadge(x.status) + '</td><td class="nowrap small">' + O.fmtRelative(x.lastCheckInOn) + '</td><td class="nowrap small">' + O.fmtDate(x.dueDate) + '</td>' +
-              '<td><a class="btn btn-sm btn-primary" href="checkin.html?id=' + encodeURIComponent(x.id) + '" aria-label="Check in on ' + esc(x.code) + '">Check in</a></td></tr>';
+      (scoped.length
+        ? '<div class="card" style="padding:0"><div class="table-wrap"><table class="data"><caption class="sr-only">Goals to check in on, most urgent first</caption><thead><tr><th scope="col">Goal</th><th scope="col">Owner</th><th scope="col">Progress</th><th scope="col">Status</th><th scope="col">Last update</th><th scope="col">Due</th><th scope="col"><span class="sr-only">Action</span></th></tr></thead><tbody>' +
+          scoped.map(function (x) {
+            var action = x.measurementType === 'Tasks'
+              ? '<a class="btn btn-sm" href="okr.html?id=' + encodeURIComponent(x.id) + '&tab=tasks" aria-label="Update tasks of ' + esc(x.code) + '">Update tasks</a>'
+              : '<a class="btn btn-sm ' + (x.dataSource ? '' : 'btn-primary') + '" href="checkin.html?id=' + encodeURIComponent(x.id) + '" aria-label="Check in on ' + esc(x.code) + '">' + (x.dataSource ? 'Add note' : 'Check in') + '</a>';
+            return '<tr><td class="cell-title">' + U.levelChip(x.level) + ' ' + U.okrLink(x) + '<div>' + U.flagChips(x) + ' ' + U.sourceChip(x) + '</div></td><td class="nowrap small">' + esc((O.user(x.ownerId) || {}).displayName || '–') + '</td>' +
+              '<td style="min-inline-size:150px">' + U.progress(x.progress, x.status, x.code) + '</td><td>' + U.statusBadge(x.status) + '</td><td class="nowrap small">' + O.fmtRelative(x.lastCheckInOn) + '</td><td class="nowrap small">' + O.fmtDate(x.dueDate) + '</td><td>' + action + '</td></tr>';
           }).join('') + '</tbody></table></div></div>'
-        : U.empty(scope === 'mine' ? 'You do not own any open items. Choose “Everything I can update” to see your department’s items.' : 'Nothing to update.'));
+        : U.empty(scope === 'mine' ? 'You have no open goals in this period. Choose another option above' + (O.can.create('Personal') ? ', or <a href="okr-edit.html?level=Personal">create an individual goal</a>' : '') + '.' : 'Nothing to update.'));
 
       var go = function () {
         var s = document.querySelector('input[name="scope"]:checked').value;
         window.location.href = 'checkin.html?scope=' + s + ($('done').checked ? '&done=1' : '');
       };
-      document.querySelectorAll('input[name="scope"]').forEach(function (r) { r.addEventListener('change', go); });
+      document.querySelectorAll('input[name="scope"]').forEach(function (x) { x.addEventListener('change', go); });
       $('done').addEventListener('change', go);
     }
+    function channelText(ch) {
+      ch = ch || {};
+      var out = [];
+      if (ch.teams) out.push('Teams');
+      if (ch.email) out.push('email');
+      return out.join(' and ') || 'in-app only';
+    }
 
-    // ------------------------------------------------------------ the check-in form with live roll-up preview
     function form() {
       if (!O.can.checkIn(o)) {
         main.innerHTML = U.pageHeader({ before: U.breadcrumb(o), title: 'Check-in: ' + o.title }) +
-          '<div class="msg msg-warning">Only the owner, or the coordinator or OKR champion of ' + esc((O.dept(o.departmentId) || {}).name || 'the department') + ', can check in on ' + esc(o.code) + '. <a href="okr.html?id=' + encodeURIComponent(o.id) + '">Open the item</a></div>';
+          '<div class="msg msg-warning">Only the owner, co-owners, their managers, or the coordinator or OKR champion of ' + esc((O.dept(o.departmentId) || {}).name || 'the department') + ' can check in on ' + esc(o.code) + (o.closedState ? ', and its cycle must be open' : '') + '. <a href="okr.html?id=' + encodeURIComponent(o.id) + '">Open the goal</a></div>';
         return;
       }
-      var rolled = o.measurementType === 'RolledUp';
+      var rolled = o.measurementType === 'RolledUp', binary = o.measurementType === 'Binary', stay = O.isStay(o);
+      var conn = o.dataSource && O.connection(o.dataSource.connectionId);
       var unitLabel = o.measurementType === 'Currency' ? 'AED' : (o.unit || 'value');
+      var valueField;
+      if (rolled) valueField = '<div class="msg msg-info">This goal rolls up from its children (' + O.pct(o.progress) + '). Add a status and narrative for context.</div>';
+      else if (binary) valueField = '<fieldset><legend>Is it done?</legend><div class="radio-row"><label><input type="radio" name="binary" value="1"' + (o.current >= 1 ? ' checked' : '') + '> Done</label><label><input type="radio" name="binary" value="0"' + (o.current >= 1 ? '' : ' checked') + '> Not done yet</label></div></fieldset>';
+      else valueField = (conn ? '<div class="msg msg-info small">' + U.icon('sync') + ' The value is updated automatically from <strong>' + esc(conn.name) + '</strong> (' + esc(conn.refresh.toLowerCase()) + '). Change it only to correct the source; normally just add a narrative.</div>' : '') +
+        '<div class="field"><label class="field-label" for="value">' + (stay ? 'Current value' : 'Current value') + ' (' + esc(unitLabel) + ')<span class="req" aria-hidden="true">*</span></label>' +
+        '<input type="number" step="any" id="value" value="' + esc(o.current) + '" aria-required="true" aria-describedby="value-hint"><span class="hint" id="value-hint"></span><span class="error" id="value-err" hidden>Enter a number.</span></div>';
+
       main.innerHTML = U.pageHeader({
         before: U.breadcrumb(o, 'Check-in', 'checkin.html'),
         title: 'Check-in: ' + o.title,
-        subtitle: U.levelChip(o.level) + ' ' + U.statusBadge(o.status) + ' Last check-in ' + O.fmtRelative(o.lastCheckInOn) + ' · current ' + esc(O.fmtValue(o, o.current)) + ' · target ' + esc(O.fmtValue(o, o.target)),
+        subtitle: U.levelChip(o.level) + ' ' + U.statusBadge(o.status) + ' Last update ' + O.fmtRelative(o.lastCheckInOn) + ' · current ' + esc(O.fmtValue(o, o.current)) + ' · target ' + esc(O.fmtTarget(o)),
       }) +
       '<div id="done-msg"></div>' +
       '<div class="grid grid-2" style="align-items:start"><form id="ci-form" class="card stack" novalidate aria-label="Check-in">' +
-        '<h2 class="section-title" style="margin:0">Update</h2>' +
-        (rolled
-          ? '<div class="msg msg-info">This item rolls up from its children (' + O.pct(o.progress) + '). Add a status and narrative for context.</div>'
-          : '<div class="field"><label class="field-label" for="value">Current value (' + esc(unitLabel) + ')<span class="req" aria-hidden="true">*</span></label>' +
-            '<input type="number" step="any" id="value" value="' + esc(o.current) + '" aria-required="true" aria-describedby="value-hint">' +
-            '<span class="hint" id="value-hint"></span><span class="error" id="value-err" hidden>Enter a number.</span></div>') +
+        '<h2 class="section-title" style="margin:0">Update</h2>' + valueField +
         '<fieldset><legend>Status</legend><div class="radio-row" id="status-row"></div><p class="hint" id="status-hint" style="margin:6px 0 0"></p></fieldset>' +
         '<div class="field"><label class="field-label" for="confidence">Confidence of reaching the target: <span id="conf-val">7</span>/10</label><input type="range" id="confidence" min="1" max="10" value="7" aria-valuetext="7 out of 10"></div>' +
         '<div class="field"><label class="field-label" for="narrative">Narrative<span class="req" aria-hidden="true">*</span></label>' +
         '<textarea id="narrative" rows="4" aria-required="true" aria-describedby="narr-hint" placeholder="What changed, what is blocking, what help is needed?"></textarea>' +
         '<span class="hint" id="narr-hint">At least one sentence (10+ characters).</span><span class="error" id="narr-err" hidden>Write at least a sentence (10+ characters) about progress and blockers.</span></div>' +
         '<div class="form-footer" id="ci-actions"><a class="btn btn-subtle" href="checkin.html">Cancel</a><button type="submit" class="btn btn-primary">' + U.icon('check') + '<span>Save check-in</span></button></div></form>' +
-      '<section class="card" aria-labelledby="ru-h"><h2 class="card-title" id="ru-h">Roll-up preview</h2><p class="small muted">Parent progress = Σ(child progress × weight) ÷ Σ(weights), recalculated up to the goal.</p>' +
-        '<div id="preview" aria-live="polite"></div></section></div>';
+      '<section class="card" aria-labelledby="ru-h"><h2 class="card-title" id="ru-h">Roll-up preview</h2><p class="small muted">Parent progress = Σ(child progress × weight) ÷ Σ(weights), recalculated up to the company goal.' + (O.countsInRollup(o) ? '' : ' This goal is aligned only, so its parent does not change.') + '</p><div id="preview" aria-live="polite"></div></section></div>';
 
       var chosen = '';
       var conf = $('confidence');
@@ -107,42 +126,39 @@
 
       function current() {
         if (rolled) return { ok: true, value: o.current, progress: o.progress };
-        var raw = $('value').value;
-        var n = Number(raw);
-        var ok = raw.trim() !== '' && isFinite(n);
-        var prog = ok ? O.measuredProgress(Object.assign({}, o, { current: n })) : o.progress;
-        return { ok: ok, value: n, progress: prog };
+        if (binary) { var b = document.querySelector('input[name="binary"]:checked'); var bv = b ? Number(b.value) : 0; return { ok: true, value: bv, progress: bv >= 1 ? 100 : 0 }; }
+        var raw = $('value').value, n = Number(raw), ok = raw.trim() !== '' && isFinite(n);
+        return { ok: ok, value: n, progress: ok ? O.measuredProgress(Object.assign({}, o, { current: n })) : o.progress };
       }
       function update() {
         var c = current();
         var suggested = O.suggestStatus(c.progress, o);
         var eff = chosen || suggested;
-        if (!rolled) $('value-hint').textContent = 'Baseline ' + O.fmtValue(o, o.baseline) + ' → target ' + O.fmtValue(o, o.target) + '. New progress: ' + Math.round(c.progress) + '%.';
-        $('status-row').innerHTML = ['OnTrack', 'AtRisk', 'OffTrack', 'Completed'].map(function (s) {
+        if (!rolled && !binary) $('value-hint').textContent = stay ? 'Threshold ' + O.fmtTarget(o) + (c.ok ? (c.progress >= 100 ? ' – met.' : ' – not met.') : '') : 'Baseline ' + O.fmtValue(o, o.baseline) + ' → target ' + O.fmtTarget(o) + '. New progress: ' + Math.round(c.progress) + '%.';
+        $('status-row').innerHTML = ['OnTrack', 'AtRisk', 'OffTrack', 'Completed'].filter(function (s) { return !(stay && s === 'Completed'); }).map(function (s) {
           return '<label><input type="radio" name="status" value="' + s + '"' + (s === eff ? ' checked' : '') + '> ' + esc(O.STATUS[s].label) + (s === suggested ? ' <span class="muted">(suggested)</span>' : '') + '</label>';
         }).join('');
-        $('status-hint').textContent = 'Suggested from progress and time elapsed: ' + O.STATUS[suggested].label + '. Expected progress by today is ' + Math.round(O.expectedProgress(o)) + '%.';
+        $('status-hint').textContent = stay ? 'Suggested from whether the threshold is met.' : 'Suggested from progress and time elapsed: ' + O.STATUS[suggested].label + '. Expected progress by today is ' + Math.round(O.expectedProgress(o)) + '%.';
         document.querySelectorAll('input[name="status"]').forEach(function (r) { r.addEventListener('change', function () { chosen = r.value; update(); var again = document.querySelector('input[name="status"][value="' + chosen + '"]'); if (again) again.focus(); }); });
         renderPreview(c.ok ? O.previewRollup(o.id, c.value, eff === suggested && !chosen ? null : eff) : [], 'Roll-up preview');
       }
       function renderPreview(rows, heading) {
         $('ru-h').textContent = heading;
-        $('preview').innerHTML = rows.length ? '<div class="table-wrap"><table class="data"><thead><tr><th scope="col">Item</th><th scope="col" class="num">Before</th><th scope="col">After</th><th scope="col">Status</th></tr></thead><tbody>' +
+        $('preview').innerHTML = rows.length ? '<div class="table-wrap"><table class="data"><thead><tr><th scope="col">Goal</th><th scope="col" class="num">Before</th><th scope="col">After</th><th scope="col">Status</th></tr></thead><tbody>' +
           rows.map(function (r) {
             var diff = Math.round(r.after) - Math.round(r.before);
             return '<tr><td><a href="okr.html?id=' + encodeURIComponent(r.id) + '" class="okr-link"><span class="code">' + esc(r.code) + '</span></a> <span class="small muted">' + esc(r.title.length > 46 ? r.title.slice(0, 46) + '…' : r.title) + '</span></td>' +
               '<td class="num">' + Math.round(r.before) + '%</td><td style="min-inline-size:150px">' + U.progress(r.after, r.statusAfter, r.code) + (diff ? '<span class="small ' + (diff > 0 ? '' : 'muted') + '">' + (diff > 0 ? '+' : '') + diff + ' points</span>' : '') + '</td><td>' + U.statusBadge(r.statusAfter) + '</td></tr>';
           }).join('') + '</tbody></table></div>' : U.empty('Enter a valid value to see the effect.');
       }
-      if (!rolled) $('value').addEventListener('input', update);
+      if ($('value')) $('value').addEventListener('input', update);
+      document.querySelectorAll('input[name="binary"]').forEach(function (r) { r.addEventListener('change', update); });
       update();
 
       $('ci-form').addEventListener('submit', function (e) {
         e.preventDefault();
-        var c = current();
-        var narrative = $('narrative').value.trim();
-        var bad = null;
-        if (!rolled) { $('value-err').hidden = c.ok; if (c.ok) $('value').removeAttribute('aria-invalid'); else { $('value').setAttribute('aria-invalid', 'true'); $('value').setAttribute('aria-describedby', 'value-err'); bad = bad || $('value'); } }
+        var c = current(), narrative = $('narrative').value.trim(), bad = null;
+        if ($('value')) { $('value-err').hidden = c.ok; if (c.ok) $('value').removeAttribute('aria-invalid'); else { $('value').setAttribute('aria-invalid', 'true'); $('value').setAttribute('aria-describedby', 'value-err'); bad = $('value'); } }
         var nOk = narrative.length >= 10;
         $('narr-err').hidden = nOk;
         if (nOk) { $('narrative').removeAttribute('aria-invalid'); $('narrative').setAttribute('aria-describedby', 'narr-hint'); }

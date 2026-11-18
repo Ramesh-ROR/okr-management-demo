@@ -24,82 +24,108 @@
     var of = function (level) { return all.filter(function (o) { return o.level === level; }); };
     var goals = of('Goal'), objectives = of('Objective'), krs = of('KeyResult');
     var krCounts = O.countByStatus(krs);
-    var attention = all.filter(function (o) { return O.isOverdue(o) || O.isStale(o) || O.isDueSoon(o); })
+    var mine = O.myGoals(all);
+    var employee = me.role === 'Employee';
+    var attentionPool = employee ? mine : all;
+    var attention = attentionPool.filter(function (o) { return O.isOverdue(o) || O.isStale(o) || O.isDueSoon(o); })
       .sort(function (a, b) { return (O.isOverdue(b) - O.isOverdue(a)) || (O.isStale(b) - O.isStale(a)) || (a.dueDate < b.dueDate ? -1 : 1); });
-    var overdue = attention.filter(O.isOverdue).length;
-    var stale = attention.filter(O.isStale).length;
     var pending = O.pendingForMe();
     var deptScoped = (me.role === 'DepartmentCoordinator' || me.role === 'OkrChampion') && me.departmentId;
-    var mine = all.filter(function (o) { return o.ownerId === me.id; });
     var myScope = deptScoped ? all.filter(function (o) { return o.departmentId === me.departmentId && o.level !== 'Goal'; }) : mine;
-    var hour = 13; // demo clock: 09:00 UTC = 13:00 Dubai
-    var greet = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+    var upcoming = O.myMeetings().filter(function (m) { return m.status === 'Scheduled' && O.daysSince(m.date) <= 0; }).slice(0, 3);
+    var closedCycle = O.currentCycle().status === 'Closed';
 
     var actions = '';
-    if (O.can.create()) actions += '<a class="btn btn-primary" href="okr-edit.html">' + U.icon('plus') + '<span>New OKR</span></a>';
+    if (O.can.create()) actions += '<a class="btn btn-primary" href="okr-edit.html' + (employee ? '?level=Personal' : '') + '">' + U.icon('plus') + '<span>' + (employee ? 'New individual goal' : 'New goal') + '</span></a>';
     if (O.can.nav('checkin')) actions += '<a class="btn" href="checkin.html">' + U.icon('checkin') + '<span>Check in</span></a>';
     if (O.can.nav('reports')) actions += '<a class="btn" href="reports.html">' + U.icon('reports') + '<span>Reports</span></a>';
 
     var html = U.pageHeader({
-      title: greet + ', ' + me.displayName.split(' ')[0],
+      title: 'Good afternoon, ' + me.displayName.split(' ')[0],
       subtitle: esc(O.ROLE_LABELS[me.role]) + ' · ' + esc(O.periodLabel()) + ' · data as of ' + O.fmtDate(O.asOf.toISOString()),
       actions: actions,
     });
 
     // KPI row
-    var onOrDone = (krCounts.OnTrack || 0) + (krCounts.Completed || 0);
-    html += '<div class="grid grid-kpi" style="margin-block-end:20px">' +
-      U.kpi('Objectives in cycle', objectives.length, goals.length + ' goals · ' + krs.length + ' key results') +
-      U.kpi('Average goal progress', O.pct(O.avg(goals, function (g) { return g.progress; })), 'Weighted roll-up of key results', 'info') +
-      U.kpi('Key results on track', onOrDone + '<span class="muted" style="font-size:18px"> / ' + krs.length + '</span>', (krCounts.AtRisk || 0) + ' at risk · ' + (krCounts.OffTrack || 0) + ' off track', 'warn') +
-      U.kpi('Needs attention', attention.length, overdue + ' overdue · ' + stale + ' without a recent check-in', 'bad') +
-      (O.can.nav('approvals')
-        ? U.kpi('Waiting for my approval', pending.length, pending.length ? '<a href="approvals.html">Review now</a>' : 'Nothing waiting')
-        : U.kpi('Unread notifications', O.unreadCount(), '<a href="notifications.html">Open notifications</a>')) +
-      '</div>';
+    if (employee) {
+      var mc = O.countByStatus(mine);
+      html += '<div class="grid grid-kpi" style="margin-block-end:20px">' +
+        U.kpi('My goals', mine.length, mine.filter(function (o) { return o.level === 'Personal'; }).length + ' individual · ' + mine.filter(function (o) { return o.level !== 'Personal'; }).length + ' assigned to me') +
+        U.kpi('Average progress', O.pct(O.avg(mine, function (o) { return o.progress; })), (mc.OnTrack || 0) + ' on track · ' + (mc.AtRisk || 0) + ' at risk', 'info') +
+        U.kpi('Need an update', attention.length, '<a href="checkin.html">Check in now</a>', attention.length ? 'warn' : '') +
+        U.kpi('Next 1:1', upcoming[0] ? O.fmtWeekday(upcoming[0].date) : '–', upcoming[0] ? 'with ' + esc(O.user(upcoming[0].managerId === me.id ? upcoming[0].employeeId : upcoming[0].managerId).displayName) + ' · <a href="meetings.html?id=' + upcoming[0].id + '">agenda</a>' : 'Nothing scheduled') + '</div>';
+    } else {
+      var onOrDone = (krCounts.OnTrack || 0) + (krCounts.Completed || 0);
+      html += '<div class="grid grid-kpi" style="margin-block-end:20px">' +
+        U.kpi('Objectives in cycle', objectives.length, goals.length + ' company goals · ' + krs.length + ' key results') +
+        U.kpi('Average goal progress', O.pct(O.avg(goals, function (g) { return g.progress; })), 'Weighted roll-up of key results', 'info') +
+        U.kpi('Key results on track', onOrDone + '<span class="muted" style="font-size:18px"> / ' + krs.length + '</span>', (krCounts.AtRisk || 0) + ' at risk · ' + (krCounts.OffTrack || 0) + ' off track', 'warn') +
+        U.kpi('Needs attention', attention.length, attention.filter(O.isOverdue).length + ' overdue · ' + attention.filter(O.isStale).length + ' without a recent check-in', 'bad') +
+        (O.can.nav('approvals') ? U.kpi('Waiting for my approval', pending.length, pending.length ? '<a href="approvals.html">Review now</a>' : 'Nothing waiting')
+          : U.kpi('Unread notifications', O.unreadCount(), '<a href="notifications.html">Open notifications</a>')) + '</div>';
+    }
 
-    // Goals at a glance
-    html += '<h2 class="section-title">Goals at a glance</h2><div class="grid grid-3" style="margin-block-end:20px">' + goals.map(function (g) {
-      var objs = O.children(g.id);
-      var risky = O.descendants(g.id).filter(function (d) { return d.level === 'KeyResult' && (d.status === 'AtRisk' || d.status === 'OffTrack'); }).length;
-      return '<article class="card goal-card"><h3>' + U.okrLink(g) + '</h3>' + U.progress(g.progress, g.status, g.code) +
-        '<div class="goal-meta">' + U.statusBadge(g.status) + U.person(g.ownerId) + '</div>' +
-        '<div class="small muted">' + objs.length + ' objectives · ' + risky + ' key results at risk or off track</div></article>';
-    }).join('') + '</div>';
+    // AI agent digest
+    if (O.db.config.ai.enabled && O.db.config.ai.features.agentDigest && !closedCycle) {
+      var sc = O.digestScope();
+      html += '<section class="card digest-card" aria-labelledby="dg-h" style="margin-block-end:20px"><div class="card-head"><div><h2 class="card-title" id="dg-h">' + U.icon('ai') + ' AI agent – weekly digest for ' + esc(sc.label) + '</h2>' +
+        '<p class="card-desc">Generated every ' + esc(O.db.config.reminders.reminderDay) + ' and sent in Teams. Rule-based in this demo.</p></div><a class="btn btn-sm btn-subtle" href="teams.html?tab=chat">See it in Teams</a></div>' + U.insightsHtml(O.insights(sc.items), 3) + '</section>';
+    }
 
-    // Charts
-    var depts = O.progressByDepartment(all);
-    html += '<div class="grid grid-2" style="margin-block-end:20px">' +
-      U.chartCard({ id: 'kr-status', title: 'Key results by status', desc: krs.length + ' key results in ' + O.periodLabel(), chart: U.statusDonut(krCounts, 'key results'), table: U.statusTable(krCounts) }) +
-      U.chartCard({
-        id: 'dept-progress', title: 'Progress by department', desc: 'Average progress of each department’s key results',
-        chart: U.hbars(depts.map(function (d) { return { label: d.label, value: d.value, sub: d.count + ' key results', href: 'explorer.html?dept=' + d.id, tip: d.label + ': ' + Math.round(d.value) + '% average across ' + d.count + ' key results' }; })),
-        table: U.simpleTable(['Department', 'Key results', 'Average progress'], depts.map(function (d) { return [esc(d.label), d.count, Math.round(d.value) + '%']; }), 'Progress by department'),
-      }) + '</div>';
+    // Goals at a glance (or my goals)
+    if (employee) {
+      html += '<h2 class="section-title">My goals</h2><div class="grid grid-3" style="margin-block-end:20px">' + (mine.length ? mine.map(function (g) {
+        var parent = O.okr(g.parentId);
+        return '<article class="card goal-card">' + U.levelChip(g.level) + '<h3>' + U.okrLink(g) + '</h3>' + U.progress(g.progress, g.status, g.code) +
+          '<div class="goal-meta">' + U.statusBadge(g.status) + U.visibilityChip(g) + U.sourceChip(g) + '</div><div class="small muted">' + (parent ? 'Aligned to ' + esc(parent.code) + ' · ' : '') + 'due ' + O.fmtDate(g.dueDate) + '</div></article>';
+      }).join('') : U.empty('You have no goals yet. <a href="okr-edit.html?level=Personal">Create an individual goal</a>.')) + '</div>';
+    } else {
+      html += '<h2 class="section-title">Company goals at a glance</h2><div class="grid grid-3" style="margin-block-end:20px">' + goals.map(function (g) {
+        var objs = O.children(g.id);
+        var risky = O.descendants(g.id).filter(function (d) { return d.level === 'KeyResult' && (d.status === 'AtRisk' || d.status === 'OffTrack'); }).length;
+        return '<article class="card goal-card"><h3>' + U.okrLink(g) + '</h3>' + U.progress(g.progress, g.status, g.code) + '<div class="goal-meta">' + U.statusBadge(g.status) + U.person(g.ownerId) + '</div>' +
+          '<div class="small muted">' + objs.length + ' objectives · ' + risky + ' key results at risk or off track</div></article>';
+      }).join('') + '</div>';
+      var depts = O.progressByDepartment(all);
+      html += '<div class="grid grid-2" style="margin-block-end:20px">' +
+        U.chartCard({ id: 'kr-status', title: 'Key results by status', desc: krs.length + ' key results in ' + O.periodLabel(), chart: U.statusDonut(krCounts, 'key results'), table: U.statusTable(krCounts) }) +
+        U.chartCard({
+          id: 'dept-progress', title: 'Progress by department', desc: 'Average progress of each department’s key results',
+          chart: U.hbars(depts.map(function (d) { return { label: d.label, value: d.value, sub: d.count + ' key results', href: 'explorer.html?dept=' + d.id, tip: d.label + ': ' + Math.round(d.value) + '% average across ' + d.count + ' key results' }; })),
+          table: U.simpleTable(['Department', 'Key results', 'Average progress'], depts.map(function (d) { return [esc(d.label), d.count, Math.round(d.value) + '%']; }), 'Progress by department'),
+        }) + '</div>';
+    }
 
-    // Attention + my items
     var itemRow = function (o, extra) {
-      return '<li><div class="list-main"><div>' + U.levelChip(o.level) + ' ' + U.okrLink(o) + '</div>' +
-        '<div class="list-meta row">' + U.statusBadge(o.status) + ' ' + O.pct(o.progress) + ' · due ' + O.fmtDate(o.dueDate) + ' · last check-in ' + O.fmtRelative(o.lastCheckInOn) + ' ' + U.flagChips(o) + '</div></div>' + (extra || '') + '</li>';
+      return '<li><div class="list-main"><div>' + U.levelChip(o.level) + ' ' + U.okrLink(o) + '</div><div class="list-meta row">' + U.statusBadge(o.status) + ' ' + O.pct(o.progress) + ' · due ' + O.fmtDate(o.dueDate) + ' · last update ' + O.fmtRelative(o.lastCheckInOn) + ' ' + U.flagChips(o) + '</div></div>' + (extra || '') + '</li>';
     };
     var checkBtn = function (o) {
-      return O.can.checkIn(o) && O.can.nav('checkin') ? '<a class="btn btn-sm" href="checkin.html?id=' + encodeURIComponent(o.id) + '">Check in</a>' : '';
+      if (!O.can.checkIn(o) || !O.can.nav('checkin')) return '';
+      return o.measurementType === 'Tasks' ? '<a class="btn btn-sm" href="okr.html?id=' + encodeURIComponent(o.id) + '&tab=tasks">Tasks</a>' : '<a class="btn btn-sm" href="checkin.html?id=' + encodeURIComponent(o.id) + '">Check in</a>';
     };
     html += '<div class="grid grid-2" style="margin-block-end:20px">' +
-      '<section class="card" aria-labelledby="att-h"><div class="card-head"><div><h2 class="card-title" id="att-h">Needs attention</h2><p class="card-desc">Overdue, no check-in for ' + O.db.config.reminders.staleAfterDays + '+ days, or due within ' + O.db.config.reminders.dueSoonDays + ' days</p></div>' +
-      '<a class="btn btn-subtle btn-sm" href="explorer.html?flag=attention">View all</a></div>' +
-      (attention.length ? '<ul class="list">' + attention.slice(0, 7).map(function (o) { return itemRow(o, checkBtn(o)); }).join('') + '</ul>' : U.empty('Nothing needs attention.')) + '</section>' +
-      '<section class="card" aria-labelledby="mine-h"><div class="card-head"><div><h2 class="card-title" id="mine-h">' + (deptScoped ? 'My department: ' + esc(O.dept(me.departmentId).name) : 'Items I own') + '</h2>' +
-      '<p class="card-desc">' + myScope.length + ' items in ' + esc(O.periodLabel()) + '</p></div>' +
-      (deptScoped ? '<a class="btn btn-subtle btn-sm" href="explorer.html?dept=' + me.departmentId + '">Open in Explorer</a>' : '') + '</div>' +
-      (myScope.length ? '<ul class="list">' + myScope.slice().sort(function (a, b) { return a.progress - b.progress; }).slice(0, 7).map(function (o) { return itemRow(o, checkBtn(o)); }).join('') + '</ul>'
-        : U.empty('You do not own any items in this period.')) + '</section></div>';
+      '<section class="card" aria-labelledby="att-h"><div class="card-head"><div><h2 class="card-title" id="att-h">Needs attention</h2><p class="card-desc">Overdue, no update for ' + O.db.config.reminders.staleAfterDays + '+ days, or due within ' + O.db.config.reminders.dueSoonDays + ' days</p></div>' +
+      '<a class="btn btn-subtle btn-sm" href="explorer.html?flag=attention' + (employee ? '&scope=mine' : '') + '">View all</a></div>' +
+      (attention.length ? '<ul class="list">' + attention.slice(0, 6).map(function (o) { return itemRow(o, checkBtn(o)); }).join('') + '</ul>' : U.empty('Nothing needs attention.')) + '</section>' +
+      '<section class="card" aria-labelledby="mtg-h"><div class="card-head"><div><h2 class="card-title" id="mtg-h">Upcoming 1:1 meetings</h2><p class="card-desc">Goals are added to the agenda automatically</p></div>' +
+      (O.can.nav('meetings') ? '<a class="btn btn-subtle btn-sm" href="meetings.html">All meetings</a>' : '') + '</div>' +
+      (upcoming.length ? '<ul class="list">' + upcoming.map(function (m) {
+        var other = O.user(m.managerId === me.id ? m.employeeId : m.managerId);
+        return '<li>' + U.avatar(other.id, 32) + '<div class="list-main"><div class="list-title"><a href="meetings.html?id=' + m.id + '">1:1 with ' + esc(other.displayName) + '</a></div><div class="list-meta">' + O.fmtWeekday(m.date) + ' at ' + O.fmtTime(m.date) + ' · ' + m.goalIds.length + ' goals · ' + m.agenda.length + ' talking points</div></div></li>';
+      }).join('') + '</ul>' : U.empty('No 1:1 meetings scheduled.')) + '</section></div>';
 
-    // Recent activity
-    var recent = O.db.audit.slice().sort(function (a, b) { return a.timestamp < b.timestamp ? 1 : -1; }).slice(0, 6);
-    html += '<section class="card" aria-labelledby="act-h"><h2 class="card-title" id="act-h" style="margin-block-end:12px">Recent activity</h2><ul class="timeline">' + recent.map(function (e) {
-      var u = O.user(e.actorId);
-      return '<li><div><strong>' + esc(u ? u.displayName : 'System') + '</strong> · ' + esc(e.details) + '</div><div class="small muted">' + esc(e.entityName) + ' · ' + O.fmtDateTime(e.timestamp) + '</div></li>';
+    if (!employee) {
+      html += '<section class="card" aria-labelledby="mine-h" style="margin-block-end:20px"><div class="card-head"><div><h2 class="card-title" id="mine-h">' + (deptScoped ? 'My department: ' + esc(O.dept(me.departmentId).name) : 'Goals I own') + '</h2><p class="card-desc">' + myScope.length + ' goals in ' + esc(O.periodLabel()) + '</p></div>' +
+        '<a class="btn btn-subtle btn-sm" href="explorer.html?' + (deptScoped ? 'dept=' + me.departmentId : 'scope=mine') + '">Open in Goals &amp; OKRs</a></div>' +
+        (myScope.length ? '<ul class="list">' + myScope.slice().sort(function (a, b) { return a.progress - b.progress; }).slice(0, 6).map(function (o) { return itemRow(o, checkBtn(o)); }).join('') + '</ul>' : U.empty('You do not own any goals in this period.')) + '</section>';
+    }
+
+    var recent = O.feed(employee ? mine : all, 6);
+    html += '<section class="card" aria-labelledby="act-h"><div class="card-head"><h2 class="card-title" id="act-h">Latest updates</h2><a class="btn btn-subtle btn-sm" href="explorer.html?view=feed' + (employee ? '&scope=mine' : '') + '">Open feed</a></div><ul class="timeline">' + recent.map(function (e) {
+      var u = O.user(e.by);
+      var valueText = O.fmtValue(e.okr, e.data.value);
+      var what = e.kind === 'checkin' ? 'checked in: ' + valueText + (/%$/.test(valueText) ? '' : ' (' + O.pct(e.data.progress) + ')') : e.kind === 'comment' ? 'commented' : e.data.details;
+      return '<li><div><strong>' + esc(u ? u.displayName : 'System') + '</strong> ' + esc(what) + '</div><div class="small muted">' + esc(e.okr.code + ' ' + e.okr.title) + ' · ' + O.fmtDateTime(e.at) + '</div></li>';
     }).join('') + '</ul></section>';
 
     main.innerHTML = html;

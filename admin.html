@@ -23,69 +23,255 @@
     var SCOPES = ['okr.read', 'okr.write', 'checkin.read', 'checkin.write', 'report.read'];
     var DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday'];
     var roleOpts = O.ROLES.map(function (r) { return { value: r, label: O.ROLE_LABELS[r] }; });
-    var deptOpts = O.db.departments.map(function (d) { return { value: d.id, label: d.name }; });
+    var approverOpts = roleOpts.filter(function (r) { return r.value !== 'PlatformAdmin' && r.value !== 'Employee'; }).concat([{ value: 'Manager', label: 'Line manager' }]);
     var audit = { action: '', actor: '', q: '' };
+    var TABS = [['levels', 'Goal types'], ['progress', 'Progress & status'], ['labels', 'Labels'], ['templates', 'Templates'], ['cycles', 'Cycles'], ['reminders', 'Reminders'], ['permissions', 'Permissions'], ['notifications', 'Notifications'], ['connections', 'Data connections'], ['roles', 'Roles'], ['audit', 'Audit log'], ['ai', 'AI Assist'], ['api', 'API access'], ['demo', 'Demo data']];
 
-    var tab = function (key, label) { return '<button type="button" role="tab" id="tab-' + key + '" data-tab="' + key + '" aria-controls="panel-' + key + '">' + label + '</button>'; };
-    var panel = function (key) { return '<div role="tabpanel" id="panel-' + key + '" data-panel="' + key + '" aria-labelledby="tab-' + key + '"></div>'; };
-    main.innerHTML = U.pageHeader({ title: 'Administration', subtitle: 'Configure levels, reminders, roles, AI Assist and API access. Every change is written to the audit log.' }) +
-      '<section id="tabs"><div class="tablist" role="tablist" aria-label="Administration areas">' +
-      tab('levels', 'Levels and approvals') + tab('reminders', 'Reminders') + tab('roles', 'Roles') + tab('audit', 'Audit log') + tab('ai', 'AI Assist') + tab('api', 'API access') + tab('demo', 'Demo data') + '</div>' +
-      ['levels', 'reminders', 'roles', 'audit', 'ai', 'api', 'demo'].map(panel).join('') + '</section>';
+    main.innerHTML = U.pageHeader({ title: 'Administration', subtitle: 'Configure how goals work across the division. Every change is written to the audit log.' }) +
+      '<section id="tabs"><div class="tablist" role="tablist" aria-label="Administration areas">' + TABS.map(function (t) { return U.tabButton(t[0], t[1]); }).join('') + '</div>' + TABS.map(function (t) { return U.tabPanel(t[0]); }).join('') + '</section>';
+    function saved(msg, detail, reload) { if (reload) { U.flash(msg, 'success', detail); window.location.reload(); } else { U.toast(msg, 'success', detail); renderAudit(); } }
 
-    // ---------------------------------------------------------------- levels
+    // ---------------------------------------------------------------- goal types (terminology, approvals, required fields)
     function renderLevels() {
-      $('panel-levels').innerHTML = '<p class="muted">Which levels need approval, who approves them and which fields are mandatory on the create form.</p>' +
-        '<form id="levels-form" class="card" style="padding:0" novalidate><div class="table-wrap"><table class="data"><thead><tr><th scope="col">Level</th><th scope="col">Approval required</th><th scope="col">Approver</th><th scope="col">Required fields</th></tr></thead><tbody>' +
+      $('panel-levels').innerHTML = '<p class="muted">Rename the goal types to match your organisation’s language, choose which need approval and who approves them, and which fields are mandatory.</p>' +
+        '<form id="levels-form" class="card" style="padding:0" novalidate><div class="table-wrap"><table class="data"><thead><tr><th scope="col">Goal type</th><th scope="col">Name shown to users</th><th scope="col">Approval</th><th scope="col">Approver</th><th scope="col">Required fields</th></tr></thead><tbody>' +
         cfg.levels.map(function (l) {
-          return '<tr><th scope="row"><strong>' + esc(l.displayName) + '</strong></th>' +
-            '<td><label class="check"><input type="checkbox" data-l="' + l.id + '" data-k="approvalRequired"' + (l.approvalRequired ? ' checked' : '') + '> Yes<span class="sr-only"> for ' + esc(l.displayName) + '</span></label></td>' +
-            '<td><label class="sr-only" for="appr-' + l.id + '">Approver for ' + esc(l.displayName) + '</label><select id="appr-' + l.id + '" data-l="' + l.id + '" data-k="approverRole">' + U.selectOptions(roleOpts.filter(function (r) { return r.value !== 'PlatformAdmin'; }), l.approverRole) + '</select></td>' +
+          return '<tr><th scope="row"><strong>' + esc(l.level) + '</strong></th><td><label class="sr-only" for="ln-' + l.id + '">Name for ' + esc(l.level) + '</label><input type="text" id="ln-' + l.id + '" data-l="' + l.id + '" data-k="displayName" value="' + esc(l.displayName) + '" maxlength="30"></td>' +
+            '<td><label class="check"><input type="checkbox" data-l="' + l.id + '" data-k="approvalRequired"' + (l.approvalRequired ? ' checked' : '') + '> Required<span class="sr-only"> for ' + esc(l.displayName) + '</span></label></td>' +
+            '<td><label class="sr-only" for="appr-' + l.id + '">Approver for ' + esc(l.displayName) + '</label><select id="appr-' + l.id + '" data-l="' + l.id + '" data-k="approverRole">' + U.selectOptions(approverOpts, l.approverRole) + '</select></td>' +
             '<td><fieldset style="border:0;padding:0"><legend class="sr-only">Required fields for ' + esc(l.displayName) + '</legend><div class="radio-row">' + Object.keys(O.REQUIRABLE_FIELDS).map(function (f) {
               return '<label><input type="checkbox" data-l="' + l.id + '" data-f="' + f + '"' + (l.requiredFields.indexOf(f) >= 0 ? ' checked' : '') + '> ' + esc(O.REQUIRABLE_FIELDS[f]) + '</label>';
             }).join('') + '</div></fieldset></td></tr>';
-        }).join('') + '</tbody></table></div><div class="form-footer" style="padding:12px 16px"><button type="submit" class="btn btn-primary">' + U.icon('check') + '<span>Save level settings</span></button></div></form>';
+        }).join('') + '</tbody></table></div><div class="form-footer" style="padding:12px 16px"><button type="submit" class="btn btn-primary">' + U.icon('check') + '<span>Save goal types</span></button></div></form>';
       $('levels-form').addEventListener('submit', function (e) {
         e.preventDefault();
+        var bad = cfg.levels.filter(function (l) { return !document.querySelector('[data-l="' + l.id + '"][data-k="displayName"]').value.trim(); });
+        if (bad.length) { U.toast('Every goal type needs a name', 'error'); return; }
         cfg.levels.forEach(function (l) {
           var patch = {
+            displayName: document.querySelector('[data-l="' + l.id + '"][data-k="displayName"]').value.trim(),
             approvalRequired: document.querySelector('[data-l="' + l.id + '"][data-k="approvalRequired"]').checked,
             approverRole: document.querySelector('[data-l="' + l.id + '"][data-k="approverRole"]').value,
             requiredFields: Array.prototype.slice.call(document.querySelectorAll('[data-l="' + l.id + '"][data-f]:checked')).map(function (c) { return c.getAttribute('data-f'); }),
           };
-          var changed = patch.approvalRequired !== l.approvalRequired || patch.approverRole !== l.approverRole || patch.requiredFields.join() !== l.requiredFields.join();
-          if (changed) O.updateLevel(l.id, patch);
+          if (JSON.stringify(patch) !== JSON.stringify({ displayName: l.displayName, approvalRequired: l.approvalRequired, approverRole: l.approverRole, requiredFields: l.requiredFields })) O.updateLevel(l.id, patch);
         });
-        U.toast('Level settings saved', 'success', 'New items use these rules from now on.');
-        renderAudit();
+        saved('Goal types saved', 'New names appear everywhere in the app.', true);
+      });
+    }
+
+    // ---------------------------------------------------------------- progress types and statuses
+    function renderProgress() {
+      var types = cfg.progressTypes || O.MEASUREMENT_TYPES;
+      $('panel-progress').innerHTML = '<form id="progress-form" class="stack" style="max-inline-size:860px" novalidate><section class="card stack"><h2 class="card-title">Progress types people can choose</h2><div class="grid grid-2">' +
+        O.MEASUREMENT_TYPES.map(function (m) { var used = O.db.okrs.filter(function (o) { return o.measurementType === m; }).length; return '<label class="check"><input type="checkbox" data-type="' + m + '"' + (types.indexOf(m) >= 0 ? ' checked' : '') + '> ' + esc(O.MEASUREMENT_LABELS[m]) + ' <span class="small muted">(' + used + ' goals)</span></label>'; }).join('') +
+        '</div><p class="small muted" style="margin:0">Existing goals keep their type when it is switched off; only new goals are affected.</p></section>' +
+        '<section class="card stack"><h2 class="card-title">Status names</h2><div class="grid grid-2">' + O.STATUSES.map(function (s) {
+          return '<label class="field"><span class="field-label"><span style="color:' + O.STATUS[s].color + '" aria-hidden="true">' + O.STATUS[s].glyph + '</span> ' + esc(s) + '</span><input type="text" data-status="' + s + '" value="' + esc(cfg.statusLabels[s]) + '" maxlength="20"></label>';
+        }).join('') + '</div>' +
+        '<label class="check"><input type="checkbox" id="auto-status"' + (cfg.autoStatus !== false ? ' checked' : '') + '> Set status automatically from progress and time elapsed (owners can still override in a check-in)</label>' +
+        '<label class="check"><input type="checkbox" id="weights"' + (cfg.weightsInRollup !== false ? ' checked' : '') + '> Use weights when rolling progress up to parent goals (off = every child counts equally)</label></section>' +
+        '<div><button type="submit" class="btn btn-primary">' + U.icon('check') + '<span>Save progress settings</span></button></div></form>';
+      $('progress-form').addEventListener('submit', function (e) {
+        e.preventDefault();
+        var t = Array.prototype.slice.call(document.querySelectorAll('[data-type]:checked')).map(function (c) { return c.getAttribute('data-type'); });
+        if (!t.length) { U.toast('Keep at least one progress type', 'error'); return; }
+        var labels = {};
+        document.querySelectorAll('[data-status]').forEach(function (i) { labels[i.getAttribute('data-status')] = i.value.trim() || cfg.statusLabels[i.getAttribute('data-status')]; });
+        O.setConfigValue('progressTypes', t, 'Allowed progress types');
+        O.setConfigValue('statusLabels', labels, 'Status names');
+        O.setConfigValue('autoStatus', $('auto-status').checked, 'Automatic status');
+        O.setConfigValue('weightsInRollup', $('weights').checked, 'Weights in roll-up');
+        saved('Progress settings saved', 'Progress and statuses were recalculated.', true);
+      });
+    }
+
+    // ---------------------------------------------------------------- labels
+    function renderLabels() {
+      $('panel-labels').innerHTML = '<div class="grid" style="grid-template-columns:minmax(0,2fr) minmax(260px,1fr);align-items:start"><div class="card" style="padding:0"><div class="table-wrap"><table class="data"><thead><tr><th scope="col">Label</th><th scope="col" class="num">Goals</th><th scope="col"><span class="sr-only">Action</span></th></tr></thead><tbody>' +
+        cfg.labels.map(function (l) {
+          var n = O.db.okrs.filter(function (o) { return (o.labels || []).indexOf(l.id) >= 0; }).length;
+          return '<tr><td><span class="chip label-chip" style="background:' + esc(l.bg) + ';color:' + esc(l.ink) + '">' + esc(l.name) + '</span></td><td class="num"><a href="explorer.html?scope=all&label=' + l.id + '">' + n + '</a></td><td><button type="button" class="btn btn-sm btn-subtle" data-del-label="' + l.id + '" aria-label="Delete label ' + esc(l.name) + '">Delete</button></td></tr>';
+        }).join('') + '</tbody></table></div></div>' +
+        '<form id="label-form" class="card stack" novalidate><h2 class="card-title">New label</h2><label class="field"><span class="field-label">Name</span><input type="text" id="lb-name" maxlength="24"></label>' +
+        '<fieldset><legend>Colour</legend><div class="radio-row">' + O.LABEL_COLOURS.map(function (c, i) { return '<label><input type="radio" name="lb-col" value="' + i + '"' + (i === 0 ? ' checked' : '') + '><span class="chip" style="background:' + c[0] + ';color:' + c[1] + '">Aa</span></label>'; }).join('') + '</div></fieldset>' +
+        '<label class="check"><input type="checkbox" id="lb-restrict"' + (cfg.permissions.labelsAdminOnly ? ' checked' : '') + '> Only administrators can create labels</label><span class="error" id="lb-err" hidden></span>' +
+        '<button type="submit" class="btn btn-primary">' + U.icon('tag') + '<span>Add label</span></button></form></div>';
+      $('label-form').addEventListener('submit', function (e) {
+        e.preventDefault();
+        var name = $('lb-name').value.trim();
+        var err = !name ? 'Give the label a name.' : cfg.labels.some(function (l) { return l.name.toLowerCase() === name.toLowerCase(); }) ? 'That label already exists.' : '';
+        $('lb-err').textContent = err; $('lb-err').hidden = !err;
+        if (err) return;
+        O.addLabel(name, Number(document.querySelector('input[name="lb-col"]:checked').value));
+        cfg.permissions.labelsAdminOnly = $('lb-restrict').checked;
+        O.save();
+        renderLabels(); saved('Label added');
+      });
+      $('panel-labels').querySelectorAll('[data-del-label]').forEach(function (b) {
+        b.addEventListener('click', function () {
+          var l = O.label(b.getAttribute('data-del-label'));
+          U.dialog({ title: 'Delete label “' + l.name + '”?', body: '<p>It is removed from every goal that uses it.</p>', okLabel: 'Delete', okClass: 'btn-danger', onOk: function () { O.removeLabel(l.id); renderLabels(); saved('Label deleted'); } });
+        });
+      });
+    }
+
+    // ---------------------------------------------------------------- templates
+    function renderTemplates(editId) {
+      var t = editId ? cfg.templates.filter(function (x) { return x.id === editId; })[0] : null;
+      $('panel-templates').innerHTML = '<div class="grid" style="grid-template-columns:minmax(0,3fr) minmax(300px,2fr);align-items:start"><div class="card" style="padding:0"><div class="table-wrap"><table class="data"><thead><tr><th scope="col">Template</th><th scope="col">Goal type</th><th scope="col">Measured as</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead><tbody>' +
+        cfg.templates.map(function (x) {
+          return '<tr><td><strong>' + esc(x.name) + '</strong><div class="small muted">' + esc(x.title) + '</div></td><td class="small">' + esc(O.LEVEL_LABELS[x.level]) + '</td><td class="small">' + esc(O.MEASUREMENT_LABELS[x.measurementType]) + '</td>' +
+            '<td class="nowrap"><button type="button" class="btn btn-sm btn-subtle" data-edit-tpl="' + x.id + '">Edit</button><button type="button" class="btn btn-sm btn-subtle" data-del-tpl="' + x.id + '">Delete</button></td></tr>';
+        }).join('') + '</tbody></table></div></div>' +
+        '<form id="tpl-form" class="card stack" novalidate><h2 class="card-title">' + (t ? 'Edit template' : 'New template') + '</h2>' +
+        '<label class="field"><span class="field-label">Template name</span><input type="text" id="tp-name" value="' + esc(t ? t.name : '') + '"></label>' +
+        '<label class="field"><span class="field-label">Goal type</span><select id="tp-level">' + U.selectOptions(O.ALL_LEVELS.map(function (l) { return { value: l, label: O.LEVEL_LABELS[l] }; }), t ? t.level : 'KeyResult') + '</select></label>' +
+        '<label class="field"><span class="field-label">Title pattern</span><input type="text" id="tp-title" value="' + esc(t ? t.title : '') + '" placeholder="Use [brackets] for parts people must fill in"></label>' +
+        '<label class="field"><span class="field-label">Description</span><textarea id="tp-desc" rows="2">' + esc(t ? t.description : '') + '</textarea></label>' +
+        '<div class="form-grid"><label class="field"><span class="field-label">Measured as</span><select id="tp-type">' + U.selectOptions(O.MEASUREMENT_TYPES.map(function (m) { return { value: m, label: O.MEASUREMENT_LABELS[m] }; }), t ? t.measurementType : 'Numeric') + '</select></label>' +
+        '<label class="field"><span class="field-label">Unit</span><input type="text" id="tp-unit" value="' + esc(t ? t.unit : '') + '"></label></div>' +
+        '<fieldset><legend>Labels</legend><div class="chip-picker">' + cfg.labels.map(function (l) { return '<label class="chip-option"><input type="checkbox" name="tp-label" value="' + l.id + '"' + (t && (t.labels || []).indexOf(l.id) >= 0 ? ' checked' : '') + '><span style="background:' + l.bg + ';color:' + l.ink + '">' + esc(l.name) + '</span></label>'; }).join('') + '</div></fieldset>' +
+        '<span class="error" id="tp-err" hidden></span><div class="row"><button type="submit" class="btn btn-primary">' + U.icon('check') + '<span>' + (t ? 'Save template' : 'Add template') + '</span></button>' + (t ? '<button type="button" class="btn btn-subtle" id="tp-cancel">Cancel</button>' : '') + '</div></form></div>';
+      $('tpl-form').addEventListener('submit', function (e) {
+        e.preventDefault();
+        var name = $('tp-name').value.trim(), title = $('tp-title').value.trim();
+        var err = !name ? 'Name the template.' : title.length < 10 ? 'The title pattern needs at least 10 characters.' : '';
+        $('tp-err').textContent = err; $('tp-err').hidden = !err;
+        if (err) return;
+        O.saveTemplate({ id: t ? t.id : null, name: name, level: $('tp-level').value, title: title, description: $('tp-desc').value.trim(), measurementType: $('tp-type').value, unit: $('tp-unit').value.trim(), baseline: t ? t.baseline : '', target: t ? t.target : '', labels: Array.prototype.slice.call(document.querySelectorAll('input[name="tp-label"]:checked')).map(function (c) { return c.value; }) });
+        renderTemplates(); saved('Template saved', 'It appears in “Start from a template” on the goal form.');
+      });
+      if ($('tp-cancel')) $('tp-cancel').addEventListener('click', function () { renderTemplates(); });
+      $('panel-templates').querySelectorAll('[data-edit-tpl]').forEach(function (b) { b.addEventListener('click', function () { renderTemplates(b.getAttribute('data-edit-tpl')); $('tp-name').focus(); }); });
+      $('panel-templates').querySelectorAll('[data-del-tpl]').forEach(function (b) { b.addEventListener('click', function () { O.removeTemplate(b.getAttribute('data-del-tpl')); renderTemplates(); saved('Template deleted'); }); });
+    }
+
+    // ---------------------------------------------------------------- cycles
+    function renderCycles() {
+      var active = O.activeCycle();
+      $('panel-cycles').innerHTML = '<div class="grid" style="grid-template-columns:minmax(0,2fr) minmax(260px,1fr);align-items:start"><div class="stack"><div class="card" style="padding:0"><div class="table-wrap"><table class="data"><thead><tr><th scope="col">Cycle</th><th scope="col">Dates</th><th scope="col">Status</th><th scope="col" class="num">Goals</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead><tbody>' +
+        O.db.cycles.map(function (c) {
+          var n = O.db.okrs.filter(function (o) { return o.cycleId === c.id; }).length;
+          return '<tr><td><label class="sr-only" for="cy-' + c.id + '">Name of ' + esc(c.name) + '</label><input type="text" id="cy-' + c.id + '" value="' + esc(c.name) + '" style="max-inline-size:160px"></td><td class="small">' + O.fmtDate(c.startDate) + ' – ' + O.fmtDate(c.endDate) + '</td>' +
+            '<td><span class="chip ' + (c.status === 'Active' ? 'dec-Approved' : c.status === 'Closed' ? 'flag-closed' : 'flag-due') + '">' + esc(c.status) + '</span></td><td class="num">' + n + '</td>' +
+            '<td class="nowrap"><button type="button" class="btn btn-sm btn-subtle" data-rename="' + c.id + '">Rename</button>' + (c.id === active.id ? '<a class="btn btn-sm btn-danger" href="cycle-close.html">Close cycle…</a>' : '') + '</td></tr>';
+        }).join('') + '</tbody></table></div></div><p class="small muted">Closing a cycle lets you carry unfinished goals into the next one, close them as they are, or drop them. Closed cycles stay available read-only for reporting.</p></div>' +
+        '<form id="cycle-form" class="card stack" novalidate><h2 class="card-title">New cycle</h2><label class="field"><span class="field-label">Name</span><input type="text" id="cy-name" placeholder="e.g. FY2028 or H1 2027"></label>' +
+        '<div class="form-grid"><label class="field"><span class="field-label">Start</span><input type="date" id="cy-start"></label><label class="field"><span class="field-label">End</span><input type="date" id="cy-end"></label></div><span class="error" id="cy-err" hidden></span>' +
+        '<button type="submit" class="btn btn-primary">' + U.icon('plus') + '<span>Add cycle</span></button></form></div>';
+      $('panel-cycles').querySelectorAll('[data-rename]').forEach(function (b) { b.addEventListener('click', function () { var id = b.getAttribute('data-rename'), v = $('cy-' + id).value.trim(); if (!v) return; O.renameCycle(id, v); saved('Cycle renamed', null, true); }); });
+      $('cycle-form').addEventListener('submit', function (e) {
+        e.preventDefault();
+        var n = $('cy-name').value.trim(), s = $('cy-start').value, en = $('cy-end').value;
+        var err = !n ? 'Name the cycle.' : !s || !en ? 'Choose start and end dates.' : en <= s ? 'The end must be after the start.' : O.db.cycles.some(function (c) { return c.name === n; }) ? 'A cycle with that name exists.' : '';
+        $('cy-err').textContent = err; $('cy-err').hidden = !err;
+        if (err) return;
+        O.addCycle(n, s, en);
+        saved('Cycle added', 'People can plan goals in it from the cycle selector.', true);
       });
     }
 
     // ---------------------------------------------------------------- reminders
     function renderReminders() {
       var r = cfg.reminders;
-      $('panel-reminders').innerHTML = '<form id="rem-form" class="card stack" style="max-inline-size:760px" novalidate><div class="form-grid">' +
-        '<label class="field"><span class="field-label">Check-in cadence</span><select id="r-cad">' + U.selectOptions(['Weekly', 'Fortnightly', 'Monthly'], r.checkInCadence) + '</select></label>' +
-        '<label class="field"><span class="field-label">Reminder day</span><select id="r-day">' + U.selectOptions(DAYS, r.reminderDay) + '</select></label>' +
+      $('panel-reminders').innerHTML = '<form id="rem-form" class="card stack" style="max-inline-size:820px" novalidate><h2 class="card-title">Check-in reminders</h2><div class="form-grid">' +
+        '<label class="field"><span class="field-label">Send reminders</span><select id="r-int">' + U.selectOptions(['Weekly', 'Every 2 weeks', 'Monthly'], r.interval || 'Every 2 weeks') + '</select></label>' +
+        '<label class="field"><span class="field-label">Starting from</span><input type="date" id="r-start" value="' + esc(r.startDate || '') + '"></label>' +
+        '<label class="field"><span class="field-label">On</span><select id="r-day">' + U.selectOptions(DAYS, r.reminderDay) + '</select></label>' +
+        '<label class="field"><span class="field-label">At</span><input type="time" id="r-time" value="' + esc(r.checkInTime || '09:00') + '"></label>' +
+        '<label class="field full"><span class="field-label">Time zone</span><select id="r-tz">' + U.selectOptions(['Gulf Standard Time (UTC+4)', 'Coordinated Universal Time (UTC)', 'India Standard Time (UTC+5:30)'], r.timeZone) + '</select></label></div>' +
+        '<fieldset><legend>Channels</legend><div class="radio-row"><label><input type="checkbox" id="r-teams"' + (r.channels && r.channels.teams ? ' checked' : '') + '> Microsoft Teams chat (adaptive cards)</label><label><input type="checkbox" id="r-email"' + (r.channels && r.channels.email ? ' checked' : '') + '> Email</label></div></fieldset>' +
+        '<label class="check"><input type="checkbox" id="r-override"' + (r.usersCanOverride ? ' checked' : '') + '> People may choose their own reminder frequency</label>' +
+        '<h2 class="card-title">Flags and escalation</h2><div class="form-grid">' +
         '<label class="field"><span class="field-label">“Due soon” window (days)</span><input type="number" min="1" max="60" id="r-due" value="' + r.dueSoonDays + '"></label>' +
-        '<label class="field"><span class="field-label">Flag as stale after (days without check-in)</span><input type="number" min="7" max="120" id="r-stale" value="' + r.staleAfterDays + '"></label>' +
-        '<label class="check full"><input type="checkbox" id="r-esc"' + (r.escalationEnabled ? ' checked' : '') + '> Escalate items that are not updated</label>' +
+        '<label class="field"><span class="field-label">Flag as stale after (days without update)</span><input type="number" min="7" max="120" id="r-stale" value="' + r.staleAfterDays + '"></label>' +
+        '<label class="check full"><input type="checkbox" id="r-esc"' + (r.escalationEnabled ? ' checked' : '') + '> Escalate goals that are not updated</label>' +
         '<label class="field"><span class="field-label">Escalate after (days)</span><input type="number" min="1" max="90" id="r-esc-days" value="' + r.escalateAfterDays + '"></label>' +
-        '<label class="field"><span class="field-label">Escalate to</span><select id="r-esc-to">' + U.selectOptions(roleOpts.filter(function (x) { return x.value !== 'PlatformAdmin'; }), r.escalateToRole) + '</select></label>' +
-        '</div><span class="error" id="r-err" hidden></span><div class="form-footer"><button type="submit" class="btn btn-primary">' + U.icon('check') + '<span>Save reminder policy</span></button></div></form>';
+        '<label class="field"><span class="field-label">Escalate to</span><select id="r-esc-to">' + U.selectOptions(approverOpts, r.escalateToRole) + '</select></label></div>' +
+        '<span class="error" id="r-err" hidden></span><div class="form-footer"><a class="btn btn-subtle" href="teams.html">Preview reminders</a><button type="submit" class="btn btn-primary">' + U.icon('check') + '<span>Save reminder policy</span></button></div></form>';
       var sync = function () { $('r-esc-days').disabled = $('r-esc-to').disabled = !$('r-esc').checked; };
       $('r-esc').addEventListener('change', sync);
       sync();
       $('rem-form').addEventListener('submit', function (e) {
         e.preventDefault();
         var due = Number($('r-due').value), stale = Number($('r-stale').value), escDays = Number($('r-esc-days').value);
-        var err = !(due >= 1 && due <= 60) ? '“Due soon” must be 1–60 days.' : !(stale >= 7 && stale <= 120) ? 'Stale must be 7–120 days.' : !(escDays >= 1 && escDays <= 90) ? 'Escalation must be 1–90 days.' : '';
-        $('r-err').textContent = err;
-        $('r-err').hidden = !err;
+        var err = !(due >= 1 && due <= 60) ? '“Due soon” must be 1–60 days.' : !(stale >= 7 && stale <= 120) ? 'Stale must be 7–120 days.' : !(escDays >= 1 && escDays <= 90) ? 'Escalation must be 1–90 days.' : !$('r-teams').checked && !$('r-email').checked ? 'Keep at least one channel on.' : '';
+        $('r-err').textContent = err; $('r-err').hidden = !err;
         if (err) return;
-        O.updateReminders({ checkInCadence: $('r-cad').value, reminderDay: $('r-day').value, dueSoonDays: due, staleAfterDays: stale, escalationEnabled: $('r-esc').checked, escalateAfterDays: escDays, escalateToRole: $('r-esc-to').value });
-        U.toast('Reminder policy saved', 'success', 'Stale and due-soon flags are recalculated across the app.');
-        renderAudit();
+        O.updateConfig('reminders', {
+          interval: $('r-int').value, checkInCadence: $('r-int').value === 'Weekly' ? 'Weekly' : $('r-int').value === 'Monthly' ? 'Monthly' : 'Fortnightly', startDate: $('r-start').value, reminderDay: $('r-day').value,
+          checkInTime: $('r-time').value, timeZone: $('r-tz').value, channels: { teams: $('r-teams').checked, email: $('r-email').checked }, usersCanOverride: $('r-override').checked,
+          dueSoonDays: due, staleAfterDays: stale, escalationEnabled: $('r-esc').checked, escalateAfterDays: escDays, escalateToRole: $('r-esc-to').value,
+        }, 'Reminder policy');
+        saved('Reminder policy saved', 'Stale and due-soon flags are recalculated across the app.');
+      });
+    }
+
+    // ---------------------------------------------------------------- permissions
+    function renderPermissions() {
+      var p = cfg.permissions;
+      var roles = O.ROLES.filter(function (r) { return r !== 'PlatformAdmin'; });
+      $('panel-permissions').innerHTML = '<form id="perm-form" class="stack" novalidate><section class="card stack"><h2 class="card-title">Who can create each goal type</h2><div class="table-wrap"><table class="data"><thead><tr><th scope="col">Goal type</th>' + roles.map(function (r) { return '<th scope="col">' + esc(O.ROLE_LABELS[r]) + '</th>'; }).join('') + '</tr></thead><tbody>' +
+        O.ALL_LEVELS.map(function (l) { return '<tr><th scope="row">' + esc(O.LEVEL_LABELS[l]) + '</th>' + roles.map(function (r) { return '<td><input type="checkbox" data-cl="' + l + '" data-cr="' + r + '" aria-label="' + esc(O.ROLE_LABELS[r] + ' can create ' + O.LEVEL_LABELS[l]) + '"' + ((p.createRules[l] || []).indexOf(r) >= 0 ? ' checked' : '') + '></td>'; }).join('') + '</tr>'; }).join('') +
+        '</tbody></table></div></section>' +
+        '<section class="card stack"><h2 class="card-title">Editing, approvals and privacy</h2>' +
+        '<label class="check"><input type="checkbox" id="p-own"' + (p.ownersCanEditOwn ? ' checked' : '') + '> Owners and co-owners can edit their own goals</label>' +
+        '<label class="check"><input type="checkbox" id="p-mgr"' + (p.managersCanEditReports ? ' checked' : '') + '> Managers can edit their team’s goals (the owner is notified)</label>' +
+        '<label class="check"><input type="checkbox" id="p-priv"' + (p.privateByDefault ? ' checked' : '') + '> Individual goals are private by default</label>' +
+        '<fieldset><legend>Route approval requests to</legend><div class="radio-row"><label><input type="radio" name="p-route" value="Role"' + (p.approvalRouting !== 'Manager' ? ' checked' : '') + '> The approver role set for each goal type</label><label><input type="radio" name="p-route" value="Manager"' + (p.approvalRouting === 'Manager' ? ' checked' : '') + '> The requester’s line manager (from Entra ID)</label></div></fieldset>' +
+        '<fieldset><legend>Who can export to Excel or CSV</legend><div class="radio-row">' + O.ROLES.map(function (r) { return '<label><input type="checkbox" data-export="' + r + '"' + (p.exportRoles.indexOf(r) >= 0 ? ' checked' : '') + '> ' + esc(O.ROLE_LABELS[r]) + '</label>'; }).join('') + '</div></fieldset></section>' +
+        '<div><button type="submit" class="btn btn-primary">' + U.icon('check') + '<span>Save permissions</span></button></div></form>';
+      $('perm-form').addEventListener('submit', function (e) {
+        e.preventDefault();
+        var rules = {};
+        O.ALL_LEVELS.forEach(function (l) { rules[l] = Array.prototype.slice.call(document.querySelectorAll('[data-cl="' + l + '"]:checked')).map(function (c) { return c.getAttribute('data-cr'); }); });
+        O.updateConfig('permissions', {
+          createRules: rules, ownersCanEditOwn: $('p-own').checked, managersCanEditReports: $('p-mgr').checked, privateByDefault: $('p-priv').checked,
+          approvalRouting: document.querySelector('input[name="p-route"]:checked').value,
+          exportRoles: Array.prototype.slice.call(document.querySelectorAll('[data-export]:checked')).map(function (c) { return c.getAttribute('data-export'); }),
+        }, 'Permissions');
+        saved('Permissions saved', 'They apply immediately – try “View as” another role.');
+      });
+    }
+
+    // ---------------------------------------------------------------- notifications
+    function renderNotifications() {
+      var NT = { Assignment: 'You are made owner or co-owner of a goal', Comment: 'Someone comments on your goal', CheckIn: 'A child goal is checked in', Approval: 'A request needs your approval', Decision: 'Your request is approved or rejected', Edited: 'A manager or admin edits your goal', Deleted: 'Your goal is deleted', Sync: 'A goal is updated automatically from a data source', Meeting: 'A 1:1 is scheduled', Reminder: 'Check-in reminders', AIDigest: 'Weekly AI digest' };
+      $('panel-notifications').innerHTML = '<form id="nt-form" class="card stack" style="max-inline-size:700px" novalidate><h2 class="card-title">Send a notification when…</h2><div class="stack-sm">' +
+        Object.keys(NT).map(function (k) { return '<label class="check"><input type="checkbox" data-nt="' + k + '"' + (cfg.notifications[k] !== false ? ' checked' : '') + '> ' + esc(NT[k]) + '</label>'; }).join('') +
+        '</div><p class="small muted" style="margin:0">Notifications appear in the app and are delivered to Teams and email according to the reminder channels and each person’s preferences.</p><div><button type="submit" class="btn btn-primary">' + U.icon('check') + '<span>Save notification settings</span></button></div></form>';
+      $('nt-form').addEventListener('submit', function (e) {
+        e.preventDefault();
+        var patch = {};
+        document.querySelectorAll('[data-nt]').forEach(function (c) { patch[c.getAttribute('data-nt')] = c.checked; });
+        O.updateConfig('notifications', patch, 'Notification settings');
+        saved('Notification settings saved');
+      });
+    }
+
+    // ---------------------------------------------------------------- data connections
+    function renderConnections() {
+      $('panel-connections').innerHTML = '<p class="muted">Key results can be updated automatically from Microsoft 365 and line-of-business data, so owners don’t re-type numbers. Values arrive as check-ins by “Automatic data sync”. All connections here are simulated.</p>' +
+        '<div class="grid grid-2" style="align-items:start">' + O.db.connections.map(function (c) {
+          var items = O.linkedItems(c.id);
+          return '<section class="card stack" aria-labelledby="cn-' + c.id + '"><div class="card-head" style="margin:0"><div><h2 class="card-title" id="cn-' + c.id + '">' + esc(c.name) + '</h2><p class="card-desc">' + esc(O.CONNECTION_TYPES[c.type]) + ' · ' + esc(c.detail) + '</p></div><span class="chip dec-Approved">' + esc(c.status) + '</span></div>' +
+            '<dl class="facts"><dt>Refresh</dt><dd>' + esc(c.refresh) + '</dd><dt>Last sync</dt><dd>' + O.fmtDateTime(c.lastSync) + '</dd><dt>Linked goals</dt><dd>' + (items.length ? items.map(function (o) { return U.okrLink(o, false); }).join(', ') : '–') + '</dd></dl>' +
+            '<div class="row"><button type="button" class="btn btn-sm" data-sync="' + c.id + '"' + (items.length ? '' : ' disabled') + '>' + U.icon('sync') + '<span>Sync now</span></button><button type="button" class="btn btn-sm btn-subtle" data-test="' + c.id + '">Test connection</button></div></section>';
+        }).join('') + '</div>' +
+        '<form id="cn-form" class="card stack" style="max-inline-size:640px;margin-block-start:16px" novalidate><h2 class="card-title">Add a connection</h2><div class="form-grid"><label class="field"><span class="field-label">Type</span><select id="cn-type">' + U.selectOptions(Object.keys(O.CONNECTION_TYPES).map(function (k) { return { value: k, label: O.CONNECTION_TYPES[k] }; })) + '</select></label>' +
+        '<label class="field"><span class="field-label">Name</span><input type="text" id="cn-name" placeholder="e.g. Capex tracker"></label><label class="field full"><span class="field-label">Location</span><input type="text" id="cn-detail" placeholder="Workspace, site, URL or plan"></label>' +
+        '<label class="field"><span class="field-label">Refresh</span><select id="cn-refresh">' + U.selectOptions(['Hourly', 'Every 6 hours', 'Daily at 06:00', 'When data changes']) + '</select></label></div><span class="error" id="cn-err" hidden></span><div><button type="submit" class="btn btn-primary">' + U.icon('link') + '<span>Connect</span></button></div></form>';
+      $('panel-connections').querySelectorAll('[data-sync]').forEach(function (b) { b.addEventListener('click', function () { var n = O.syncConnection(b.getAttribute('data-sync')); renderConnections(); saved('Synced ' + n + ' goals', 'New values were recorded as check-ins and roll-ups recalculated.'); }); });
+      $('panel-connections').querySelectorAll('[data-test]').forEach(function (b) { b.addEventListener('click', function () { U.toast('Connection OK', 'success', 'Signed in and read the latest row (simulated).'); }); });
+      $('cn-form').addEventListener('submit', function (e) {
+        e.preventDefault();
+        var name = $('cn-name').value.trim();
+        $('cn-err').textContent = name ? '' : 'Give the connection a name.'; $('cn-err').hidden = !!name;
+        if (!name) return;
+        O.db.connections.push({ id: 'cn-' + Date.now().toString(36), type: $('cn-type').value, name: name, detail: $('cn-detail').value.trim() || '–', refresh: $('cn-refresh').value, status: 'Connected', lastSync: O.now() });
+        O.updateConfig(null, null, 'Data connection “' + name + '” added');
+        renderConnections(); saved('Connection added', 'Link it to a key result on the goal form.');
       });
     }
 
@@ -100,32 +286,24 @@
             '<td><button type="button" class="btn btn-sm btn-subtle" data-remove="' + esc(ra.id) + '" aria-label="Remove ' + esc(O.ROLE_LABELS[ra.role]) + ' role from ' + esc(u ? u.displayName : '') + '">Remove</button></td></tr>';
         }).join('') + '</tbody></table></div></div>' +
         '<form id="role-form" class="card stack" novalidate><h2 class="card-title">Assign a role</h2>' +
-        '<label class="field"><span class="field-label">Person</span><select id="ra-user">' + U.selectOptions(O.db.users.map(function (u) { return { value: u.id, label: u.displayName }; }), '', 'Choose a person') + '</select></label>' +
+        '<label class="field"><span class="field-label">Person</span><select id="ra-user">' + U.selectOptions(O.people().map(function (u) { return { value: u.id, label: u.displayName }; }), '', 'Choose a person') + '</select></label>' +
         '<label class="field"><span class="field-label">Role</span><select id="ra-role">' + U.selectOptions(roleOpts) + '</select></label>' +
-        '<label class="field"><span class="field-label">Department scope</span><select id="ra-dept">' + U.selectOptions(deptOpts, '', 'Whole division') + '</select><span class="hint">Coordinators and OKR champions need a department.</span></label>' +
-        '<span class="error" id="ra-err" hidden></span><button type="submit" class="btn btn-primary">' + U.icon('plus') + '<span>Assign role</span></button></form></div>';
+        '<label class="field"><span class="field-label">Department scope</span><select id="ra-dept">' + U.selectOptions(O.db.departments.map(function (d) { return { value: d.id, label: d.name }; }), '', 'Whole division') + '</select><span class="hint">Coordinators and OKR champions need a department.</span></label>' +
+        '<span class="error" id="ra-err" hidden></span><button type="submit" class="btn btn-primary">' + U.icon('plus') + '<span>Assign role</span></button>' +
+        '<p class="small muted" style="margin:0">People and reporting lines are synced from Microsoft Entra ID; roles are assigned here.</p></form></div>';
       $('role-form').addEventListener('submit', function (e) {
         e.preventDefault();
         var u = $('ra-user').value, r = $('ra-role').value, d = $('ra-dept').value;
-        var err = !u ? 'Choose a person.' : ((r === 'DepartmentCoordinator' || r === 'OkrChampion') && !d) ? 'This role needs a department.' :
-          O.db.roleAssignments.some(function (x) { return x.userId === u && x.role === r && (x.departmentId || '') === d; }) ? 'This person already has that role.' : '';
-        $('ra-err').textContent = err;
-        $('ra-err').hidden = !err;
+        var err = !u ? 'Choose a person.' : ((r === 'DepartmentCoordinator' || r === 'OkrChampion') && !d) ? 'This role needs a department.' : O.db.roleAssignments.some(function (x) { return x.userId === u && x.role === r && (x.departmentId || '') === d; }) ? 'This person already has that role.' : '';
+        $('ra-err').textContent = err; $('ra-err').hidden = !err;
         if (err) return;
         O.addRoleAssignment(u, r, d);
-        U.toast('Role assigned', 'success');
-        renderRoles();
-        renderAudit();
+        renderRoles(); saved('Role assigned');
       });
       $('panel-roles').querySelectorAll('[data-remove]').forEach(function (b) {
         b.addEventListener('click', function () {
           var ra = O.db.roleAssignments.filter(function (x) { return x.id === b.getAttribute('data-remove'); })[0];
-          U.dialog({
-            title: 'Remove role?',
-            body: '<p>Remove the ' + esc(O.ROLE_LABELS[ra.role]) + ' role from ' + esc(O.user(ra.userId).displayName) + '?</p>',
-            okLabel: 'Remove', okClass: 'btn-danger',
-            onOk: function () { O.removeRoleAssignment(ra.id); U.toast('Role removed', 'success'); renderRoles(); renderAudit(); },
-          });
+          U.dialog({ title: 'Remove role?', body: '<p>Remove the ' + esc(O.ROLE_LABELS[ra.role]) + ' role from ' + esc(O.user(ra.userId).displayName) + '?</p>', okLabel: 'Remove', okClass: 'btn-danger', onOk: function () { O.removeRoleAssignment(ra.id); renderRoles(); saved('Role removed'); } });
         });
       });
     }
@@ -134,8 +312,7 @@
     function auditRows() {
       return O.db.audit.slice().sort(function (a, b) { return a.timestamp < b.timestamp ? 1 : -1; }).filter(function (e) {
         var q = audit.q.toLowerCase();
-        return (!audit.action || e.action === audit.action) && (!audit.actor || e.actorId === audit.actor) &&
-          (!q || (e.entityName + ' ' + e.details).toLowerCase().indexOf(q) >= 0);
+        return (!audit.action || e.action === audit.action) && (!audit.actor || e.actorId === audit.actor) && (!q || (e.entityName + ' ' + e.details).toLowerCase().indexOf(q) >= 0);
       });
     }
     function renderAudit() {
@@ -143,15 +320,14 @@
       var actors = O.db.users.filter(function (u) { return O.db.audit.some(function (e) { return e.actorId === u.id; }); });
       var rows = auditRows();
       $('panel-audit').innerHTML = '<form class="filters" id="audit-filters" aria-label="Filter audit log">' +
-        '<label class="field field-grow"><span class="field-label">Search</span><input type="search" id="a-q" value="' + esc(audit.q) + '" placeholder="Item or detail"></label>' +
+        '<label class="field field-grow"><span class="field-label">Search</span><input type="search" id="a-q" value="' + esc(audit.q) + '" placeholder="Goal or detail"></label>' +
         '<label class="field"><span class="field-label">Action</span><select id="a-action">' + U.selectOptions(actions, audit.action, 'All actions') + '</select></label>' +
         '<label class="field"><span class="field-label">By</span><select id="a-actor">' + U.selectOptions(actors.map(function (u) { return { value: u.id, label: u.displayName }; }), audit.actor, 'Anyone') + '</select></label>' +
-        '<button type="button" class="btn" id="a-export">' + U.icon('download') + '<span>Export CSV</span></button></form>' +
+        '<button type="button" class="btn" id="a-export">' + U.icon('download') + '<span>Export to Excel</span></button></form>' +
         '<p class="muted" aria-live="polite">' + rows.length + ' of ' + O.db.audit.length + ' events. The log is append-only: entries cannot be edited or deleted.</p>' +
         '<div class="card" style="padding:0"><div class="table-wrap"><table class="data"><thead><tr><th scope="col">When</th><th scope="col">By</th><th scope="col">Action</th><th scope="col">Record</th><th scope="col">Details</th></tr></thead><tbody>' +
-        rows.map(function (e) {
-          return '<tr><td class="nowrap small">' + O.fmtDateTime(e.timestamp) + '</td><td class="nowrap small">' + esc((O.user(e.actorId) || {}).displayName || 'System') + '</td><td><span class="chip">' + esc(e.action) + '</span></td>' +
-            '<td class="small">' + esc(e.entityName) + '<div class="muted">' + esc(e.entityType) + '</div></td><td class="small">' + esc(e.details) + '</td></tr>';
+        rows.slice(0, 200).map(function (e) {
+          return '<tr><td class="nowrap small">' + O.fmtDateTime(e.timestamp) + '</td><td class="nowrap small">' + esc((O.user(e.actorId) || {}).displayName || 'System') + '</td><td><span class="chip">' + esc(e.action) + '</span></td><td class="small">' + esc(e.entityName) + '<div class="muted">' + esc(e.entityType) + '</div></td><td class="small">' + esc(e.details) + '</td></tr>';
         }).join('') + '</tbody></table></div></div>';
       $('a-q').addEventListener('input', function (e) { audit.q = e.target.value; var pos = e.target.selectionStart; renderAudit(); $('a-q').focus(); $('a-q').setSelectionRange(pos, pos); });
       $('a-action').addEventListener('change', function (e) { audit.action = e.target.value; renderAudit(); $('a-action').focus(); });
@@ -159,30 +335,24 @@
       $('audit-filters').addEventListener('submit', function (e) { e.preventDefault(); });
       $('a-export').addEventListener('click', function () {
         var list = auditRows();
-        O.downloadCsv('okr-audit-log.csv', O.toCsv(list, [
-          { label: 'Timestamp (UTC)', value: function (e) { return e.timestamp; } },
-          { label: 'By', value: function (e) { return (O.user(e.actorId) || {}).displayName || 'System'; } },
-          { label: 'Action', value: function (e) { return e.action; } },
-          { label: 'Table', value: function (e) { return e.entityType; } },
-          { label: 'Record', value: function (e) { return e.entityName; } },
-          { label: 'Details', value: function (e) { return e.details; } },
-        ]));
-        O.logExport('Audit log');
-        U.toast('Exported ' + list.length + ' events to CSV', 'success');
+        O.downloadXlsx('okr-audit-log.xlsx', 'Audit log', list, [
+          { label: 'Timestamp (UTC)', value: function (e) { return e.timestamp; }, width: 24 }, { label: 'By', value: function (e) { return (O.user(e.actorId) || {}).displayName || 'System'; }, width: 22 },
+          { label: 'Action', value: function (e) { return e.action; }, width: 14 }, { label: 'Table', value: function (e) { return e.entityType; }, width: 20 },
+          { label: 'Record', value: function (e) { return e.entityName; }, width: 50 }, { label: 'Details', value: function (e) { return e.details; }, width: 70 },
+        ]);
+        O.logExport('Audit log', 'Excel');
+        U.toast('Exported ' + list.length + ' events to Excel', 'success');
         renderAudit();
       });
     }
 
-    // ---------------------------------------------------------------- AI settings
+    // ---------------------------------------------------------------- AI
     function renderAi() {
       var f = cfg.ai.features;
-      $('panel-ai').innerHTML = '<form id="ai-settings" class="card stack" style="max-inline-size:640px" novalidate>' +
-        '<label class="check"><input type="checkbox" id="ai-on"' + (cfg.ai.enabled ? ' checked' : '') + '> <strong>Enable AI Assist for all users</strong></label>' +
-        '<fieldset id="ai-feats"><legend>Features</legend><div class="stack-sm">' +
-        '<label class="check"><input type="checkbox" data-feat="draftObjective"' + (f.draftObjective ? ' checked' : '') + '> Draft an objective from a rough idea</label>' +
-        '<label class="check"><input type="checkbox" data-feat="suggestKeyResults"' + (f.suggestKeyResults ? ' checked' : '') + '> Suggest measurable key results</label>' +
-        '<label class="check"><input type="checkbox" data-feat="summariseCheckIns"' + (f.summariseCheckIns ? ' checked' : '') + '> Summarise check-in history</label></div></fieldset>' +
-        '<p class="msg msg-info small" style="margin:0">In this demo the suggestions are pre-written. In production they would come from an approved AI service, with a person always confirming before anything is saved.</p>' +
+      var FEATS = { draftObjective: 'Draft an objective with key results from a rough idea', suggestKeyResults: 'Suggest measurable key results for an objective', summariseCheckIns: 'Summarise a goal’s check-in history', aiDescriptions: '“Write with AI” for goal descriptions', agentDigest: 'AI agent: weekly digest, drifting and stalled goal alerts', chatbot: 'Chatbot in Teams that creates goals from a sentence' };
+      $('panel-ai').innerHTML = '<form id="ai-settings" class="card stack" style="max-inline-size:700px" novalidate><label class="check"><input type="checkbox" id="ai-on"' + (cfg.ai.enabled ? ' checked' : '') + '> <strong>Enable AI Assist for everyone</strong></label>' +
+        '<fieldset id="ai-feats"><legend>Features</legend><div class="stack-sm">' + Object.keys(FEATS).map(function (k) { return '<label class="check"><input type="checkbox" data-feat="' + k + '"' + (f[k] ? ' checked' : '') + '> ' + esc(FEATS[k]) + '</label>'; }).join('') + '</div></fieldset>' +
+        '<p class="msg msg-info small" style="margin:0">In this demo the suggestions are pre-written and the agent’s insights are rule-based. In production they would come from an approved AI service (for example Copilot Studio or Azure OpenAI in your tenant), and a person always confirms before anything is saved.</p>' +
         '<div class="form-footer"><button type="submit" class="btn btn-primary">' + U.icon('check') + '<span>Save AI settings</span></button></div></form>';
       var sync = function () { $('ai-feats').disabled = !$('ai-on').checked; };
       $('ai-on').addEventListener('change', sync);
@@ -191,25 +361,24 @@
         e.preventDefault();
         var feats = {};
         document.querySelectorAll('[data-feat]').forEach(function (c) { feats[c.getAttribute('data-feat')] = c.checked; });
-        O.updateAi({ enabled: $('ai-on').checked, features: feats });
-        U.flash('AI settings saved', 'success', 'The AI Assist button reflects the new settings.');
-        window.location.reload();
+        cfg.ai.enabled = $('ai-on').checked;
+        Object.assign(cfg.ai.features, feats);
+        O.updateConfig(null, null, 'AI Assist settings');
+        saved('AI settings saved', 'The AI Assist button reflects the new settings.', true);
       });
     }
 
     // ---------------------------------------------------------------- API credentials
     function renderApi() {
       var list = O.db.apiCredentials;
-      $('panel-api').innerHTML = '<p class="muted">Credentials for systems that read or write OKR data (for example a Power BI refresh). Secrets are shown once when created.</p>' +
+      $('panel-api').innerHTML = '<p class="muted">Credentials for systems that read or write OKR data (for example a Power BI refresh or the SCADA historian feed). Secrets are shown once.</p>' +
         '<div class="grid" style="grid-template-columns:minmax(0,2fr) minmax(260px,1fr);align-items:start"><div class="card" style="padding:0"><div class="table-wrap"><table class="data"><thead><tr><th scope="col">Name</th><th scope="col">Client ID</th><th scope="col">Scopes</th><th scope="col">Expires</th><th scope="col">Last used</th><th scope="col">Status</th><th scope="col"><span class="sr-only">Action</span></th></tr></thead><tbody>' +
         list.map(function (c) {
           return '<tr><td><strong>' + esc(c.name) + '</strong><div class="small muted">Created ' + O.fmtDate(c.createdOn) + '</div></td><td class="small"><code>' + esc(c.clientId.slice(0, 8)) + '…</code></td><td class="small">' + esc(c.scopes.join(', ')) + '</td>' +
-            '<td class="nowrap small">' + O.fmtDate(c.expiresOn) + '</td><td class="nowrap small">' + (c.lastUsedOn ? O.fmtRelative(c.lastUsedOn) : 'Never') + '</td>' +
-            '<td><span class="chip ' + (c.status === 'Active' ? 'dec-Approved' : 'dec-Rejected') + '">' + esc(c.status) + '</span></td>' +
+            '<td class="nowrap small">' + O.fmtDate(c.expiresOn) + '</td><td class="nowrap small">' + (c.lastUsedOn ? O.fmtRelative(c.lastUsedOn) : 'Never') + '</td><td><span class="chip ' + (c.status === 'Active' ? 'dec-Approved' : 'dec-Rejected') + '">' + esc(c.status) + '</span></td>' +
             '<td>' + (c.status === 'Active' ? '<button type="button" class="btn btn-sm btn-subtle" data-revoke="' + esc(c.id) + '" aria-label="Revoke ' + esc(c.name) + '">Revoke</button>' : '') + '</td></tr>';
         }).join('') + '</tbody></table></div></div>' +
-        '<form id="api-form" class="card stack" novalidate><h2 class="card-title">New credential</h2>' +
-        '<label class="field"><span class="field-label">Name</span><input type="text" id="api-name" maxlength="80" placeholder="e.g. Data warehouse export"></label>' +
+        '<form id="api-form" class="card stack" novalidate><h2 class="card-title">New credential</h2><label class="field"><span class="field-label">Name</span><input type="text" id="api-name" maxlength="80" placeholder="e.g. Data warehouse export"></label>' +
         '<fieldset><legend>Scopes</legend><div class="stack-sm">' + SCOPES.map(function (s) { return '<label class="check"><input type="checkbox" data-scope="' + s + '"' + (/read$/.test(s) ? ' checked' : '') + '> ' + s + '</label>'; }).join('') + '</div></fieldset>' +
         '<span class="error" id="api-err" hidden></span><button type="submit" class="btn btn-primary">' + U.icon('plus') + '<span>Create credential</span></button></form></div>';
       $('api-form').addEventListener('submit', function (e) {
@@ -217,40 +386,29 @@
         var name = $('api-name').value.trim();
         var scopes = Array.prototype.slice.call(document.querySelectorAll('[data-scope]:checked')).map(function (c) { return c.getAttribute('data-scope'); });
         var err = name.length < 3 ? 'Give the credential a name (3+ characters).' : !scopes.length ? 'Choose at least one scope.' : '';
-        $('api-err').textContent = err;
-        $('api-err').hidden = !err;
+        $('api-err').textContent = err; $('api-err').hidden = !err;
         if (err) return;
         var res = O.createApiCredential(name, scopes);
-        renderApi();
-        renderAudit();
-        U.dialog({
-          title: 'Credential created',
-          body: '<p>Copy the secret now. It will not be shown again.</p><div class="field"><span class="field-label">Client ID</span><div class="secret">' + esc(res.credential.clientId) + '</div></div>' +
-            '<div class="field"><span class="field-label">Client secret (demo value)</span><div class="secret">' + esc(res.secret) + '</div></div>',
-          cancelLabel: 'Done',
-        });
+        renderApi(); renderAudit();
+        U.dialog({ title: 'Credential created', body: '<p>Copy the secret now. It will not be shown again.</p><div class="field"><span class="field-label">Client ID</span><div class="secret">' + esc(res.credential.clientId) + '</div></div><div class="field"><span class="field-label">Client secret (demo value)</span><div class="secret">' + esc(res.secret) + '</div></div>', cancelLabel: 'Done' });
       });
       $('panel-api').querySelectorAll('[data-revoke]').forEach(function (b) {
         b.addEventListener('click', function () {
           var c = O.db.apiCredentials.filter(function (x) { return x.id === b.getAttribute('data-revoke'); })[0];
-          U.dialog({
-            title: 'Revoke ' + c.name + '?', body: '<p>Systems using this credential stop working immediately.</p>', okLabel: 'Revoke', okClass: 'btn-danger',
-            onOk: function () { O.revokeApiCredential(c.id); U.toast('Credential revoked', 'success'); renderApi(); renderAudit(); },
-          });
+          U.dialog({ title: 'Revoke ' + c.name + '?', body: '<p>Systems using this credential stop working immediately.</p>', okLabel: 'Revoke', okClass: 'btn-danger', onOk: function () { O.revokeApiCredential(c.id); renderApi(); saved('Credential revoked'); } });
         });
       });
     }
 
-    // ---------------------------------------------------------------- demo data
     function renderDemo() {
       $('panel-demo').innerHTML = '<div class="card stack" style="max-inline-size:640px"><h2 class="card-title">About the demo data</h2>' +
-        '<p style="margin:0">All people, projects and figures are fictitious. Changes you make (check-ins, approvals, new items, settings) are kept in this browser only, so you can move between pages and come back later.</p>' +
-        '<dl class="facts"><dt>Items</dt><dd>' + O.db.okrs.length + '</dd><dt>Check-ins</dt><dd>' + O.db.checkins.length + '</dd><dt>Approval requests</dt><dd>' + O.db.approvals.length + '</dd><dt>Audit events</dt><dd>' + O.db.audit.length + '</dd><dt>People</dt><dd>' + O.db.users.length + '</dd></dl>' +
+        '<p style="margin:0">All people, projects and figures are fictitious. Changes you make are kept in this browser only, so you can move between pages and come back later.</p>' +
+        '<dl class="facts"><dt>Goals</dt><dd>' + O.db.okrs.length + '</dd><dt>Check-ins</dt><dd>' + O.db.checkins.length + '</dd><dt>Tasks</dt><dd>' + O.db.tasks.length + '</dd><dt>1:1 meetings</dt><dd>' + O.db.meetings.length + '</dd><dt>Approval requests</dt><dd>' + O.db.approvals.length + '</dd><dt>Audit events</dt><dd>' + O.db.audit.length + '</dd><dt>People</dt><dd>' + O.people().length + '</dd></dl>' +
         '<div><button type="button" class="btn btn-danger" id="reset2">' + U.icon('reset') + '<span>Reset demo data</span></button></div></div>';
       $('reset2').addEventListener('click', function () { $('reset-demo').click(); });
     }
 
-    renderLevels(); renderReminders(); renderRoles(); renderAudit(); renderAi(); renderApi(); renderDemo();
+    renderLevels(); renderProgress(); renderLabels(); renderTemplates(); renderCycles(); renderReminders(); renderPermissions(); renderNotifications(); renderConnections(); renderRoles(); renderAudit(); renderAi(); renderApi(); renderDemo();
     U.tabs($('tabs'));
   })();
   </script>

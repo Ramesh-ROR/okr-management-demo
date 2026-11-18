@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Create or edit OKR · OKR Management System</title>
+  <title>Create or edit goal · OKR Management System</title>
   <link rel="icon" href="assets/img/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="assets/css/styles.css">
 </head>
@@ -17,215 +17,298 @@
     'use strict';
     var O = window.OKR, U = O.ui, esc = O.esc;
     var editing = O.okr(O.param('id'));
-    var main = U.shell('explorer', editing ? 'Edit ' + editing.code : 'New OKR');
+    var copyOf = O.okr(O.param('copy'));
+    var main = U.shell('explorer', editing ? 'Edit ' + editing.code : 'New goal');
     if (!main) return;
     var me = O.currentUser();
     var cycle = O.currentCycle();
+    var cfg = O.db.config;
+    var $ = function (x) { return document.getElementById(x); };
 
-    if (O.param('id') && !editing) { main.innerHTML = U.pageHeader({ title: 'Item not found' }) + U.empty('<a href="explorer.html">Back to the OKR Explorer</a>'); return; }
+    if (O.param('id') && !editing) { main.innerHTML = U.pageHeader({ title: 'Goal not found' }) + U.empty('<a href="explorer.html">Back to Goals &amp; OKRs</a>'); return; }
     if (editing && !O.can.edit(editing)) {
-      main.innerHTML = U.pageHeader({ title: 'Edit ' + editing.code }) + '<div class="msg msg-warning">The ' + esc(O.ROLE_LABELS[me.role]) + ' role cannot edit this item. Owners, executives, the VDO and the department’s coordinator can. <a href="okr.html?id=' + encodeURIComponent(editing.id) + '">Back to the item</a></div>';
+      main.innerHTML = U.pageHeader({ title: 'Edit ' + editing.code }) + '<div class="msg msg-warning">You cannot edit this goal' + (editing.closedState || O.cycle(editing.cycleId).status === 'Closed' ? ' because its cycle is closed' : ' with the ' + esc(O.ROLE_LABELS[me.role]) + ' role') + '. <a href="okr.html?id=' + encodeURIComponent(editing.id) + '">Back to the goal</a></div>';
       return;
     }
     var levels = editing ? [editing.level] : O.can.createLevels();
     if (!levels.length) {
-      main.innerHTML = U.pageHeader({ title: 'New OKR' }) + '<div class="msg msg-warning">The ' + esc(O.ROLE_LABELS[me.role]) + ' role cannot create OKRs. Switch role with “View as”.</div>';
+      main.innerHTML = U.pageHeader({ title: 'New goal' }) + '<div class="msg msg-warning">' + (cycle.status === 'Closed' ? esc(cycle.name) + ' is closed. Switch to the active cycle to create goals.' : 'The ' + esc(O.ROLE_LABELS[me.role]) + ' role cannot create goals. Switch role with “View as”.') + '</div>';
       return;
     }
 
     // ---------- initial values
     var p = function (k) { return O.param(k); };
     var parentFromUrl = O.okr(p('parent'));
-    var startLevel = editing ? editing.level : (levels.indexOf(p('level')) >= 0 ? p('level') : (parentFromUrl && levels.indexOf(O.childLevel(parentFromUrl.level)) >= 0 ? O.childLevel(parentFromUrl.level) : levels[0]));
-    var v = editing ? Object.assign({}, editing) : {
-      level: startLevel, parentId: parentFromUrl ? parentFromUrl.id : '', title: p('title') || '', description: p('description') || '',
-      ownerId: me.role === 'PlatformAdmin' ? '' : me.id, departmentId: parentFromUrl ? parentFromUrl.departmentId : (me.departmentId || ''), teamId: '',
-      measurementType: p('measurementType') || '', unit: p('unit') || '', baseline: p('baseline') || '', target: p('target') || '', weight: 10,
-      startDate: cycle.startDate, dueDate: cycle.endDate, visibility: 'Public',
-    };
-    if (!v.measurementType) v.measurementType = (v.level === 'Goal' || v.level === 'Objective') ? 'RolledUp' : v.level === 'KeyResult' ? 'Numeric' : 'Percentage';
+    var urlLevel = p('level');
+    var startLevel = editing ? editing.level : copyOf && levels.indexOf(copyOf.level) >= 0 ? copyOf.level : levels.indexOf(urlLevel) >= 0 ? urlLevel
+      : (parentFromUrl && levels.indexOf(O.childLevel(parentFromUrl.level)) >= 0 ? O.childLevel(parentFromUrl.level) : levels[0]);
+    var v;
+    if (editing) v = Object.assign({}, editing);
+    else if (copyOf) {
+      v = Object.assign({}, copyOf, { title: 'Copy of ' + copyOf.title, ownerId: copyOf.ownerId, labels: (copyOf.labels || []).slice(), coOwnerIds: (copyOf.coOwnerIds || []).slice() });
+      if (copyOf.measurementType === 'Tasks') v.taskText = O.tasksFor(copyOf.id).map(function (t) { return t.title; }).join('\n');
+    } else {
+      v = {
+        level: startLevel, parentId: parentFromUrl ? parentFromUrl.id : '', title: p('title') || '', description: p('description') || '',
+        ownerId: me.role === 'PlatformAdmin' ? '' : me.id, coOwnerIds: [], departmentId: parentFromUrl ? parentFromUrl.departmentId : (me.departmentId || ''), teamId: me.teamId || '',
+        measurementType: p('measurementType') || '', unit: p('unit') || '', baseline: p('baseline') || '', target: p('target') || '', weight: 10, labels: [],
+        startDate: cycle.startDate, dueDate: cycle.endDate, visibility: startLevel === 'Personal' && cfg.permissions.privateByDefault ? 'Private' : 'Public',
+        contributesToParent: startLevel !== 'Personal', dataSource: null, taskText: '',
+      };
+    }
+    v.level = startLevel;
+    var allowedTypes = (cfg.progressTypes || O.MEASUREMENT_TYPES).filter(function (t) { return !editing || t !== 'Tasks' || editing.measurementType === 'Tasks'; });
+    if (editing && allowedTypes.indexOf(editing.measurementType) < 0) allowedTypes.push(editing.measurementType);
+    function defaultType(lvl) {
+      var pref = (lvl === 'Goal' || lvl === 'Objective') ? 'RolledUp' : lvl === 'KeyResult' ? 'Numeric' : lvl === 'Personal' ? 'Binary' : 'Percentage';
+      return allowedTypes.indexOf(pref) >= 0 ? pref : allowedTypes[0];
+    }
+    if (!v.measurementType || allowedTypes.indexOf(v.measurementType) < 0) v.measurementType = defaultType(v.level);
     if (!editing && v.measurementType === 'Percentage' && !v.unit) v.unit = '%';
 
-    var users = O.db.users.filter(function (u) { return u.role !== 'PlatformAdmin'; }).map(function (u) { return { value: u.id, label: u.displayName + ' – ' + u.jobTitle }; });
+    var users = O.people().filter(function (u) { return u.role !== 'PlatformAdmin'; }).map(function (u) { return { value: u.id, label: u.displayName + ' – ' + u.jobTitle }; });
+    var templates = (cfg.templates || []).filter(function (t) { return levels.indexOf(t.level) >= 0; });
+    var feedConns = (O.db.connections || []).filter(function (c) { return c.type === 'PowerBI' || c.type === 'SharePointExcel' || c.type === 'API'; });
+    var title = editing ? 'Edit ' + O.LEVEL_LABELS[editing.level].toLowerCase() + ' ' + editing.code : copyOf ? 'Duplicate ' + copyOf.code : 'New goal';
 
-    // ---------- markup
-    var title = editing ? 'Edit ' + O.LEVEL_LABELS[editing.level].toLowerCase() + ' ' + editing.code : 'New OKR';
     main.innerHTML = U.pageHeader({
       before: editing ? U.breadcrumb(editing) : '',
       title: title,
-      subtitle: editing ? esc(editing.title) : 'Create a goal, objective, key result, initiative or action item in ' + esc(cycle.name) + '.',
+      subtitle: editing ? esc(editing.title) : 'Create a company goal, objective, key result, initiative, action item or individual goal in ' + esc(cycle.name) + '.',
+      actions: !editing && O.can.create() ? '<a class="btn btn-subtle" href="import.html">' + U.icon('upload') + '<span>Bulk import from Excel</span></a>' : '',
     }) +
     '<div id="err-summary" class="msg msg-error" tabindex="-1" hidden style="margin-block-end:16px"></div>' +
     '<div class="detail-grid"><form id="form" class="card stack" novalidate aria-label="' + esc(title) + '">' +
+      (!editing && templates.length ? '<div class="template-bar"><label class="field"><span class="field-label">Start from a template</span><select id="template">' + U.selectOptions(templates.map(function (t) { return { value: t.id, label: t.name + ' (' + O.LEVEL_LABELS[t.level] + ')' }; }), '', 'Blank goal') + '</select><span class="hint">Templates are managed in Administration.</span></label></div>' : '') +
       '<div class="form-grid">' +
-      field('level', 'Level', '<select id="level"' + (editing ? ' disabled' : '') + '>' + U.selectOptions(levels.map(function (l) { return { value: l, label: O.LEVEL_LABELS[l] }; }), v.level) + '</select>', true, editing ? 'The level cannot be changed after creation.' : 'Only the levels your role may create are listed.') +
-      field('parentId', 'Parent', '<select id="parentId"></select>', true, '') +
+      field('level', 'Goal type', '<select id="level"' + (editing ? ' disabled' : '') + '>' + U.selectOptions(levels.map(function (l) { return { value: l, label: O.LEVEL_LABELS[l] }; }), v.level) + '</select>', true, editing ? 'The goal type cannot be changed after creation.' : 'Only the goal types your role may create are listed.') +
+      field('parentId', 'Aligned to (parent)', '<select id="parentId"></select>', true, '') +
+      '<label class="check full" id="f-contrib"><input type="checkbox" id="contributesToParent"' + (v.contributesToParent !== false ? ' checked' : '') + '> Count this goal’s progress in the parent’s roll-up</label>' +
       field('title', 'Title', '<input type="text" id="title" maxlength="160" value="' + esc(v.title) + '">', true, 'Outcome-focused and specific, at least 10 characters.', 'full') +
-      field('description', 'Description', '<textarea id="description" rows="3">' + esc(v.description) + '</textarea>', false, '', 'full') +
+      field('description', 'Description', '<textarea id="description" rows="3">' + esc(v.description) + '</textarea>' + (cfg.ai.enabled && cfg.ai.features.aiDescriptions ? '<div><button type="button" class="btn btn-sm btn-subtle" id="ai-desc">' + U.icon('ai') + '<span>Write with AI</span></button></div>' : ''), false, '', 'full') +
       field('ownerId', 'Owner', '<select id="ownerId">' + U.selectOptions(users, v.ownerId, 'Choose an owner') + '</select>', true) +
+      '<div class="field" id="f-coOwnerIds"><span class="field-label" id="co-l">Co-owners</span><details class="multi"><summary id="co-summary">None</summary><div class="multi-list" role="group" aria-labelledby="co-l">' +
+        users.map(function (u) { return '<label class="check"><input type="checkbox" name="co" value="' + esc(u.value) + '"' + ((v.coOwnerIds || []).indexOf(u.value) >= 0 ? ' checked' : '') + '> ' + esc(u.label) + '</label>'; }).join('') + '</div></details><span class="hint">Co-owners can check in and edit.</span></div>' +
       field('departmentId', 'Department', '<select id="departmentId">' + U.selectOptions(O.db.departments.map(function (d) { return { value: d.id, label: d.name }; }), v.departmentId, 'Choose a department') + '</select>', true) +
       field('teamId', 'Team', '<select id="teamId"></select>', false) +
-      field('visibility', 'Visibility', '<select id="visibility">' + U.selectOptions([{ value: 'Public', label: 'Everyone in the division' }, { value: 'Department', label: 'Own department only' }, { value: 'Private', label: 'Owner and managers only' }], v.visibility) + '</select>', true) +
-      field('measurementType', 'Measured as', '<select id="measurementType">' + U.selectOptions(O.MEASUREMENT_TYPES.map(function (m) { return { value: m, label: O.MEASUREMENT_LABELS[m] }; }), v.measurementType) + '</select>', true) +
+      field('visibility', 'Visibility', '<select id="visibility">' + U.selectOptions([{ value: 'Public', label: 'Everyone in the division' }, { value: 'Department', label: 'Own department only' }, { value: 'Private', label: 'Private – owner, co-owners and their managers' }], v.visibility) + '</select>', true) +
+      '<div class="field" id="f-labels"><span class="field-label" id="lab-l">Labels<span class="req" data-req aria-hidden="true" hidden>*</span></span><div class="chip-picker" role="group" aria-labelledby="lab-l">' +
+        (cfg.labels || []).map(function (l) { return '<label class="chip-option"><input type="checkbox" name="label" value="' + esc(l.id) + '"' + ((v.labels || []).indexOf(l.id) >= 0 ? ' checked' : '') + '><span style="background:' + esc(l.bg) + ';color:' + esc(l.ink) + '">' + esc(l.name) + '</span></label>'; }).join('') +
+        '</div><span class="error" id="labels-err" hidden></span></div>' +
+      field('measurementType', 'Progress measured as', '<select id="measurementType"' + (editing && editing.measurementType === 'Tasks' ? ' disabled' : '') + '>' + U.selectOptions(allowedTypes.map(function (m) { return { value: m, label: O.MEASUREMENT_LABELS[m] }; }), v.measurementType) + '</select>', true) +
       field('unit', 'Unit', '<input type="text" id="unit" maxlength="20" value="' + esc(v.unit) + '" placeholder="e.g. %, min, km, substations">', false, '', 'measured') +
-      field('baseline', 'Baseline', '<input type="number" step="any" id="baseline" value="' + esc(v.baseline) + '">', false, 'Value at the start of the cycle.', 'measured') +
-      field('target', 'Target', '<input type="number" step="any" id="target" value="' + esc(v.target) + '">', false, 'Can be lower than the baseline (for example, fewer outages).', 'measured') +
+      field('baseline', 'Baseline', '<input type="number" step="any" id="baseline" value="' + esc(v.baseline) + '">', false, '', 'measured') +
+      field('target', 'Target', '<input type="number" step="any" id="target" value="' + esc(v.target) + '">', false, '', 'measured') +
+      (editing ? '' : '<div class="field full" id="f-tasks" hidden><label for="taskText" class="field-label">Tasks (one per line)<span class="req" aria-hidden="true">*</span></label><textarea id="taskText" rows="4" placeholder="Survey section 8&#10;Survey section 9">' + esc(v.taskText || '') + '</textarea><span class="hint">Created in Microsoft Planner (or To Do for individual goals) and linked to this goal.</span><span class="error" id="taskText-err" hidden></span></div>') +
+      '<div class="field full" id="f-source"><label for="dataSource" class="field-label">Update the value automatically from</label><div class="row nowrap"><select id="dataSource" style="flex:1">' +
+        U.selectOptions(feedConns.map(function (c) { return { value: c.id, label: c.name + ' (' + O.CONNECTION_TYPES[c.type] + ')' }; }), v.dataSource ? v.dataSource.connectionId : '', 'Nobody – owners update it in check-ins') +
+        '</select><label class="sr-only" for="dataField">Field or cell</label><input type="text" id="dataField" placeholder="Field, column or cell" value="' + esc(v.dataSource ? v.dataSource.field : '') + '" style="flex:1"></div><span class="hint">Connections are managed in Administration › Data connections.</span></div>' +
       field('weight', 'Weight', '<input type="number" min="0" max="100" step="1" id="weight" value="' + esc(v.weight) + '">', true, '') +
       '<div></div>' +
       field('startDate', 'Start date', '<input type="date" id="startDate" value="' + esc(v.startDate) + '" min="' + cycle.startDate + '" max="' + cycle.endDate + '">', true) +
       field('dueDate', 'Due date', '<input type="date" id="dueDate" value="' + esc(v.dueDate) + '" min="' + cycle.startDate + '" max="' + cycle.endDate + '">', false) +
       '</div>' +
-      (editing && editing.measurementType !== 'RolledUp' ? '<p class="hint" style="margin:0">Current value (' + esc(O.fmtValue(editing, editing.current)) + ') is updated through check-ins.</p>' : '') +
-      '<div id="gated" class="msg msg-info" hidden></div>' +
+      (editing && editing.measurementType !== 'RolledUp' ? '<p class="hint" style="margin:0">The current value (' + esc(O.fmtValue(editing, editing.current)) + ') changes through check-ins' + (editing.measurementType === 'Tasks' ? ' and task updates' : '') + '.</p>' : '') +
       '<div class="form-footer"><a class="btn btn-subtle" href="' + (editing ? 'okr.html?id=' + encodeURIComponent(editing.id) : 'explorer.html') + '">Cancel</a>' +
       (editing ? '<button type="submit" class="btn btn-primary" data-mode="save">' + U.icon('check') + '<span>Save changes</span></button>'
         : '<button type="submit" class="btn" data-mode="draft" id="btn-draft">Save as draft</button><button type="submit" class="btn btn-primary" data-mode="submit" id="btn-submit">' + U.icon('check') + '<span id="btn-submit-label">Create</span></button>') +
       '</div></form>' +
       '<aside class="stack"><section class="card" aria-labelledby="help-h"><h2 class="card-title" id="help-h" style="margin-block-end:8px">How it rolls up</h2><div id="weight-help" class="small"></div></section>' +
-      '<section class="card" aria-labelledby="rules-h"><h2 class="card-title" id="rules-h" style="margin-block-end:8px">Rules for this level</h2><div id="level-help" class="small"></div></section>' +
-      (O.db.config.ai.enabled ? '<section class="card" id="ai-help" aria-labelledby="aih-h"><h2 class="card-title" id="aih-h" style="margin-block-end:8px">Need help with wording?</h2><p class="small muted">AI Assist can draft objectives and propose measurable key results.</p><button type="button" class="btn btn-sm" id="ai-btn">' + U.icon('ai') + '<span>Open AI Assist</span></button></section>' : '') +
+      '<section class="card" aria-labelledby="rules-h"><h2 class="card-title" id="rules-h" style="margin-block-end:8px">Rules for this goal type</h2><div id="level-help" class="small"></div></section>' +
+      '<section class="card" aria-labelledby="types-h"><h2 class="card-title" id="types-h" style="margin-block-end:8px">Progress types</h2><div id="type-help" class="small"></div></section>' +
+      (cfg.ai.enabled ? '<section class="card" id="ai-help" aria-labelledby="aih-h"><h2 class="card-title" id="aih-h" style="margin-block-end:8px">Need help with wording?</h2><p class="small muted">AI Assist drafts objectives with key results, or proposes measurable key results for an objective.</p><button type="button" class="btn btn-sm" id="ai-btn">' + U.icon('ai') + '<span>Open AI Assist</span></button></section>' : '') +
       '</aside></div>';
 
-    function field(id, label, control, required, hint, cls) {
+    function field(id, labelText, control, required, hint, cls) {
       return '<div class="field' + (cls === 'full' ? ' full' : '') + '" id="f-' + id + '"' + (cls === 'measured' ? ' data-measured' : '') + '>' +
-        '<label for="' + id + '" class="field-label">' + esc(label) + '<span class="req" data-req aria-hidden="true"' + (required ? '' : ' hidden') + '>*</span></label>' + control +
+        '<label for="' + id + '" class="field-label">' + esc(labelText) + '<span class="req" data-req aria-hidden="true"' + (required ? '' : ' hidden') + '>*</span></label>' + control +
         '<span class="hint" id="' + id + '-hint">' + (hint || '') + '</span><span class="error" id="' + id + '-err" hidden></span></div>';
     }
-    var $ = function (id) { return document.getElementById(id); };
 
+    var TYPE_HELP = {
+      RolledUp: 'Progress is the weighted average of the child goals.',
+      Numeric: 'Progress = (current − baseline) ÷ (target − baseline). The target can be lower than the baseline.',
+      Percentage: 'Like a number, in %. Example: raise availability from 98% to 99.5%.',
+      Currency: 'Like a number, in AED. Example: cut the backlog from AED 18M to AED 9M.',
+      Milestone: 'Progress = milestones done ÷ total milestones.',
+      StayAbove: 'A KPI that must stay at or above a threshold. 100% while it is met; the baseline shows how far below it can fall.',
+      StayBelow: 'A KPI that must stay at or below a threshold, such as leakage or response time.',
+      Binary: 'Either done or not done – useful for approvals, certificates and one-off deliverables.',
+      Tasks: 'Progress = tasks done ÷ all tasks. Tasks live in Microsoft Planner or To Do and sync both ways.',
+    };
+    function lvl() { return $('level').value; }
+    function mt() { return $('measurementType').value; }
     function requiredFields() {
-      var lvl = $('level').value;
       var req = ['title', 'ownerId', 'departmentId', 'visibility', 'measurementType', 'weight', 'startDate'];
-      if (lvl !== 'Goal') req.push('parentId');
-      (O.levelConfig(lvl).requiredFields || []).forEach(function (f) {
+      if (lvl() !== 'Goal' && lvl() !== 'Personal') req.push('parentId');
+      (O.levelConfig(lvl()).requiredFields || []).forEach(function (f) {
         if (f === 'team') req.push('teamId');
-        else if (['baseline', 'target', 'unit'].indexOf(f) >= 0) { if ($('measurementType').value !== 'RolledUp') req.push(f); }
+        else if (['baseline', 'target', 'unit'].indexOf(f) >= 0) { if (['RolledUp', 'Binary', 'Tasks'].indexOf(mt()) < 0 && !(f === 'unit' && mt() === 'Milestone')) req.push(f); }
         else req.push(f);
       });
-      if ($('measurementType').value !== 'RolledUp') { if (req.indexOf('target') < 0) req.push('target'); }
+      if (['RolledUp', 'Binary', 'Tasks'].indexOf(mt()) < 0 && req.indexOf('target') < 0) req.push('target');
+      if (O.isStay({ measurementType: mt() }) && req.indexOf('baseline') < 0) req.push('baseline');
       return req;
     }
-
     function syncParent() {
-      var lvl = $('level').value;
-      var pl = O.parentLevel(lvl);
+      var pls = O.parentLevelsFor(lvl());
       var sel = $('parentId');
-      var wrap = $('f-parentId');
-      wrap.hidden = !pl;
-      if (!pl) { sel.innerHTML = ''; return; }
-      var opts = O.db.okrs.filter(function (o) { return o.level === pl && o.cycleId === cycle.id && o.approvalState !== 'Rejected' && (!editing || o.id !== editing.id); })
-        .sort(O.levelOrder).map(function (o) { return { value: o.id, label: o.code + ' – ' + (o.title.length > 70 ? o.title.slice(0, 70) + '…' : o.title) }; });
+      $('f-parentId').hidden = !pls.length;
+      $('f-contrib').hidden = !pls.length || !sel.value;
+      if (!pls.length) { sel.innerHTML = ''; return; }
+      var opts = O.cycleOkrs().filter(function (o) { return pls.indexOf(o.level) >= 0 && o.approvalState !== 'Rejected' && (!editing || o.id !== editing.id); })
+        .map(function (o) { return { value: o.id, label: o.code + ' – ' + (o.title.length > 70 ? o.title.slice(0, 70) + '…' : o.title) }; });
       var current = sel.value || v.parentId;
-      sel.innerHTML = U.selectOptions(opts, current, 'Choose the parent ' + O.LEVEL_LABELS[pl].toLowerCase());
-      $('parentId-hint').textContent = O.LEVEL_LABELS[lvl] + 's sit under ' + O.LEVEL_LABELS[pl].toLowerCase() + 's.';
+      sel.innerHTML = U.selectOptions(opts, current, lvl() === 'Personal' ? 'Not aligned (stand-alone individual goal)' : 'Choose the parent ' + O.LEVEL_LABELS[pls[0]].toLowerCase());
+      $('parentId-hint').textContent = lvl() === 'Personal' ? 'Optional. Align it to an objective, key result, initiative or action to show your contribution.' : O.LEVEL_LABELS[lvl()] + 's sit under ' + O.LEVEL_LABELS[pls[0]].toLowerCase() + 's.';
+      $('f-contrib').hidden = !sel.value;
     }
     function syncTeams() {
-      var dep = $('departmentId').value;
-      var cur = $('teamId').value || v.teamId;
+      var dep = $('departmentId').value, cur = $('teamId').value || v.teamId;
       $('teamId').innerHTML = U.selectOptions(O.db.teams.filter(function (t) { return t.departmentId === dep; }).map(function (t) { return { value: t.id, label: t.name }; }), cur, dep ? 'No team' : 'Choose a department first');
     }
     function syncMeasured() {
-      var rolled = $('measurementType').value === 'RolledUp';
-      document.querySelectorAll('[data-measured]').forEach(function (el) { el.hidden = rolled; });
-      $('measurementType-hint').textContent = rolled ? 'Progress is calculated from the weighted progress of its children.' : $('measurementType').value === 'Milestone' ? 'Baseline 0 and target = number of milestones.' : 'Progress = (current − baseline) ÷ (target − baseline).';
+      var m = mt();
+      var showValues = ['RolledUp', 'Binary', 'Tasks'].indexOf(m) < 0;
+      document.querySelectorAll('[data-measured]').forEach(function (el) { el.hidden = !showValues; });
+      if ($('f-tasks')) $('f-tasks').hidden = m !== 'Tasks';
+      $('f-source').hidden = !showValues;
+      var stay = O.isStay({ measurementType: m });
+      document.querySelector('label[for="baseline"]').firstChild.textContent = stay ? 'Starting value' : m === 'Milestone' ? 'Milestones done at start' : 'Baseline';
+      document.querySelector('label[for="target"]').firstChild.textContent = stay ? 'Threshold' : m === 'Milestone' ? 'Total milestones' : 'Target';
+      $('baseline-hint').textContent = stay ? 'Where the KPI was when the goal started; used to show how far below the threshold it is.' : 'Value at the start of the cycle.';
+      $('target-hint').textContent = m === 'StayAbove' ? 'Met while the value is at or above this.' : m === 'StayBelow' ? 'Met while the value is at or below this.' : 'Can be lower than the baseline (for example, fewer outages).';
+      $('measurementType-hint').textContent = TYPE_HELP[m] || '';
+      $('type-help').innerHTML = '<ul style="margin:0;padding-inline-start:18px">' + allowedTypes.map(function (t) { return '<li' + (t === m ? ' style="font-weight:600"' : '') + '>' + esc(O.MEASUREMENT_LABELS[t]) + '</li>'; }).join('') + '</ul><p class="muted" style="margin:8px 0 0">Your administrator chooses which types are available.</p>';
     }
     function syncRequired() {
       var req = requiredFields();
       document.querySelectorAll('.field[id^="f-"]').forEach(function (wrap) {
-        var id = wrap.id.slice(2);
-        var on = req.indexOf(id) >= 0;
+        var id = wrap.id.slice(2), on = req.indexOf(id) >= 0;
         var star = wrap.querySelector('[data-req]');
         if (star) star.hidden = !on;
         var ctl = $(id);
         if (ctl) { if (on) ctl.setAttribute('aria-required', 'true'); else ctl.removeAttribute('aria-required'); }
       });
-      var lvl = $('level').value;
-      var cfg = O.levelConfig(lvl);
-      $('level-help').innerHTML = '<ul style="margin:0;padding-inline-start:18px">' +
-        '<li>' + (cfg.approvalRequired ? 'New ' + esc(O.LEVEL_LABELS[lvl].toLowerCase()) + 's need approval by the <strong>' + esc(O.ROLE_LABELS[cfg.approverRole]) + '</strong>.' : 'No approval needed; it is active as soon as it is saved.') + '</li>' +
-        '<li>Required by your administrator: ' + esc((cfg.requiredFields || []).map(function (f) { return O.REQUIRABLE_FIELDS[f] || f; }).join(', ') || 'nothing extra') + '.</li>' +
-        (editing && cfg.approvalRequired && editing.approvalState === 'Approved' ? '<li>Changing the <strong>target</strong> or <strong>weight</strong> of an approved item creates an approval request instead of changing it straight away.</li>' : '') + '</ul>';
-      if (!editing) {
-        $('btn-draft').hidden = !cfg.approvalRequired;
-        $('btn-submit-label').textContent = cfg.approvalRequired ? 'Submit for approval' : 'Create';
-      }
-      var ai = $('ai-help');
-      if (ai) ai.hidden = !(lvl === 'Objective' || lvl === 'KeyResult');
+      var c = O.levelConfig(lvl());
+      var approver = lvl() === 'Personal' || cfg.permissions.approvalRouting === 'Manager' ? 'the owner’s line manager' : O.ROLE_LABELS[c.approverRole];
+      $('level-help').innerHTML = '<ul style="margin:0;padding-inline-start:18px"><li>' + (c.approvalRequired ? 'New ' + esc(O.LEVEL_LABELS[lvl()].toLowerCase()) + 's need approval by <strong>' + esc(approver) + '</strong>.' : 'No approval needed; it is active as soon as it is saved.') + '</li>' +
+        '<li>Required by your administrator: ' + esc((c.requiredFields || []).map(function (f) { return O.REQUIRABLE_FIELDS[f] || f; }).join(', ') || 'nothing extra') + '.</li>' +
+        (lvl() === 'Personal' ? '<li>Individual goals are ' + (cfg.permissions.privateByDefault ? 'private by default' : 'visible to everyone unless you make them private') + '.</li>' : '') +
+        (editing && c.approvalRequired && editing.approvalState === 'Approved' ? '<li>Changing the <strong>target</strong> or <strong>weight</strong> creates an approval request instead of changing it straight away.</li>' : '') + '</ul>';
+      if (!editing) { $('btn-draft').hidden = !c.approvalRequired; $('btn-submit-label').textContent = c.approvalRequired ? 'Submit for approval' : 'Create'; }
+      if ($('ai-help')) $('ai-help').hidden = !(lvl() === 'Objective' || lvl() === 'KeyResult');
     }
     function syncWeight() {
       var parent = O.okr($('parentId').value);
-      var w = Number($('weight').value) || 0;
-      var box = $('weight-help');
-      if (!parent) { box.innerHTML = '<p style="margin:0">Goals sit at the top. Their progress is the weighted average of their objectives.</p>'; $('weight-hint').textContent = ''; return; }
-      var sibs = O.children(parent.id).filter(function (s) { return s.approvalState !== 'Rejected' && (!editing || s.id !== editing.id); });
+      var w = Number($('weight').value) || 0, box = $('weight-help');
+      var counts = parent && (lvl() !== 'Personal' || $('contributesToParent').checked) && $('contributesToParent').checked;
+      if (!parent) { box.innerHTML = '<p style="margin:0">' + (lvl() === 'Goal' ? 'Company goals sit at the top. Their progress is the weighted average of their objectives.' : 'Not aligned yet – choose a parent to see how it contributes.') + '</p>'; $('weight-hint').textContent = ''; return; }
+      if (!counts) { box.innerHTML = '<p style="margin:0">Aligned to ' + esc(parent.code) + ' for visibility only. Its progress does not change ' + esc(parent.code) + '.</p>'; $('weight-hint').textContent = 'Only used when the goal counts in the parent’s roll-up.'; return; }
+      var sibs = O.children(parent.id).filter(function (s) { return O.countsInRollup(s) && (!editing || s.id !== editing.id); });
       var total = sibs.reduce(function (s, x) { return s + (Number(x.weight) || 0); }, 0) + w;
       var share = total ? (w / total) * 100 : 0;
       $('weight-hint').textContent = 'Carries ' + Math.round(share) + '% of ' + parent.code + '’s progress.';
       box.innerHTML = '<p style="margin-block-start:0">' + esc(parent.code) + ' progress = Σ(child progress × weight) ÷ Σ(weights).</p>' +
-        U.hbars(sibs.map(function (s) { return { label: s.code, value: total ? (s.weight / total) * 100 : 0, status: 'NotStarted', tip: s.code + ': weight ' + s.weight }; })
-          .concat([{ label: (editing ? editing.code : 'This item') + ' (this)', value: share, status: 'brand', tip: 'This item: weight ' + w }]));
+        U.hbars(sibs.map(function (s) { return { label: s.code, value: total ? (s.weight / total) * 100 : 0, status: 'NotStarted', tip: s.code + ': weight ' + s.weight }; }).concat([{ label: (editing ? editing.code : 'This goal') + ' (this)', value: share, status: 'brand', tip: 'This goal: weight ' + w }]));
+    }
+    function syncCo() {
+      var names = Array.prototype.slice.call(document.querySelectorAll('input[name="co"]:checked')).map(function (c) { return O.user(c.value).displayName; });
+      $('co-summary').textContent = names.length ? names.join(', ') : 'None';
+    }
+    function applyTemplate(t) {
+      if (levels.indexOf(t.level) >= 0) $('level').value = t.level;
+      $('title').value = t.title; $('description').value = t.description || '';
+      onLevel(true);
+      if (allowedTypes.indexOf(t.measurementType) >= 0) $('measurementType').value = t.measurementType;
+      $('unit').value = t.unit || ''; $('baseline').value = t.baseline; $('target').value = t.target;
+      document.querySelectorAll('input[name="label"]').forEach(function (c) { c.checked = (t.labels || []).indexOf(c.value) >= 0; });
+      syncMeasured(); syncRequired();
+      U.toast('Template applied', 'success', 'Replace the [placeholders] in the title.');
+      $('title').focus();
+    }
+    function onLevel(keepType) {
+      var l = lvl();
+      if (!keepType) $('measurementType').value = defaultType(l);
+      if (!editing) {
+        $('contributesToParent').checked = l !== 'Personal';
+        if (l === 'Personal') { $('visibility').value = cfg.permissions.privateByDefault ? 'Private' : 'Public'; $('ownerId').value = me.role === 'PlatformAdmin' ? '' : me.id; }
+      }
+      syncParent(); syncMeasured(); syncRequired(); syncWeight();
     }
 
-    syncParent(); syncTeams(); syncMeasured(); syncRequired(); syncWeight();
-    $('level').addEventListener('change', function () {
-      var lvl = $('level').value;
-      $('measurementType').value = (lvl === 'Goal' || lvl === 'Objective') ? 'RolledUp' : lvl === 'KeyResult' ? 'Numeric' : 'Percentage';
-      syncParent(); syncMeasured(); syncRequired(); syncWeight();
-    });
+    syncParent(); syncTeams(); syncMeasured(); syncRequired(); syncWeight(); syncCo();
+    $('level').addEventListener('change', function () { onLevel(false); });
     $('parentId').addEventListener('change', function () {
       var par = O.okr($('parentId').value);
       if (par && !editing && !$('departmentId').value) { $('departmentId').value = par.departmentId; syncTeams(); }
+      $('f-contrib').hidden = !par;
       syncWeight();
     });
+    $('contributesToParent').addEventListener('change', syncWeight);
     $('departmentId').addEventListener('change', syncTeams);
-    $('measurementType').addEventListener('change', function () { syncMeasured(); syncRequired(); if ($('measurementType').value === 'Percentage' && !$('unit').value) $('unit').value = '%'; });
+    $('measurementType').addEventListener('change', function () { syncMeasured(); syncRequired(); if (mt() === 'Percentage' && !$('unit').value) $('unit').value = '%'; });
     $('weight').addEventListener('input', syncWeight);
-    var aiBtn = $('ai-btn');
-    if (aiBtn) aiBtn.addEventListener('click', function () {
-      var lvl = $('level').value;
-      U.setAiContext({ feature: lvl === 'KeyResult' ? 'suggestKeyResults' : 'draftObjective', okrId: lvl === 'KeyResult' ? $('parentId').value : '' });
-      var b = $('ai-open');
-      if (b) { if (!$('ai-drawer').hidden) b.click(); b.click(); }
-      var topic = $('ai-topic');
-      if (topic && lvl === 'Objective') topic.value = $('title').value;
+    document.querySelectorAll('input[name="co"]').forEach(function (c) { c.addEventListener('change', syncCo); });
+    if ($('template')) $('template').addEventListener('change', function (e) { var t = (cfg.templates || []).filter(function (x) { return x.id === e.target.value; })[0]; if (t) applyTemplate(t); });
+    if ($('ai-desc')) $('ai-desc').addEventListener('click', function () {
+      if ($('title').value.trim().length < 5) { U.toast('Write a title first', 'error', 'AI Assist uses the title to draft the description.'); $('title').focus(); return; }
+      $('description').value = O.aiDescribe($('title').value.trim(), lvl());
+      U.toast('Description drafted', 'success', 'Review and edit it before saving.');
+      $('description').focus();
+    });
+    if ($('ai-btn')) $('ai-btn').addEventListener('click', function () {
+      U.openAi({ feature: lvl() === 'KeyResult' ? 'suggestKeyResults' : 'draftObjective', okrId: lvl() === 'KeyResult' ? $('parentId').value : '', topic: lvl() === 'Objective' ? $('title').value : undefined });
     });
 
     // ---------- validate and save
     function readValues() {
-      var lvl = $('level').value;
-      var rolled = $('measurementType').value === 'RolledUp';
+      var m = mt();
       var out = {
-        level: lvl, parentId: O.parentLevel(lvl) ? $('parentId').value : null, title: $('title').value.trim(), description: $('description').value.trim(),
-        ownerId: $('ownerId').value, departmentId: $('departmentId').value, teamId: $('teamId').value || null, visibility: $('visibility').value,
-        measurementType: $('measurementType').value, weight: Number($('weight').value), startDate: $('startDate').value, dueDate: $('dueDate').value,
+        level: lvl(), parentId: $('parentId').value || null, title: $('title').value.trim(), description: $('description').value.trim(),
+        ownerId: $('ownerId').value, coOwnerIds: Array.prototype.slice.call(document.querySelectorAll('input[name="co"]:checked')).map(function (c) { return c.value; }).filter(function (c) { return c !== $('ownerId').value; }),
+        departmentId: $('departmentId').value, teamId: $('teamId').value || null, visibility: $('visibility').value,
+        labels: Array.prototype.slice.call(document.querySelectorAll('input[name="label"]:checked')).map(function (c) { return c.value; }),
+        measurementType: m, weight: Number($('weight').value), startDate: $('startDate').value, dueDate: $('dueDate').value,
+        contributesToParent: !!$('parentId').value && $('contributesToParent').checked,
       };
-      if (rolled) { out.unit = '%'; out.baseline = 0; out.target = 100; }
+      if (lvl() === 'Goal') out.parentId = null;
+      if (m === 'RolledUp') { out.unit = '%'; out.baseline = 0; out.target = 100; }
+      else if (m === 'Binary') { out.unit = ''; out.baseline = 0; out.target = 1; }
+      else if (m === 'Tasks') { out.unit = 'tasks'; out.baseline = 0; }
       else { out.unit = $('unit').value.trim(); out.baseline = $('baseline').value === '' ? '' : Number($('baseline').value); out.target = $('target').value === '' ? '' : Number($('target').value); }
+      var src = $('dataSource').value;
+      out.dataSource = ['RolledUp', 'Binary', 'Tasks'].indexOf(m) < 0 && src ? { connectionId: src, field: $('dataField').value.trim() || 'Value', lastSync: (editing && editing.dataSource && editing.dataSource.connectionId === src) ? editing.dataSource.lastSync : null } : (m === 'Tasks' && editing ? editing.dataSource : null);
       return out;
     }
+    function taskTitles() { return $('taskText') ? $('taskText').value.split(/\r?\n/).map(function (s) { return s.trim(); }).filter(Boolean) : []; }
     function validate(val) {
       var errs = {};
-      var req = requiredFields();
-      req.forEach(function (k) { if (val[k] === '' || val[k] === null || val[k] === undefined || (typeof val[k] === 'number' && isNaN(val[k]))) errs[k] = 'Required.'; });
+      requiredFields().forEach(function (k) {
+        var x = val[k];
+        if (k === 'labels') { if (!val.labels.length) errs.labels = 'Choose at least one label.'; return; }
+        if (x === '' || x === null || x === undefined || (typeof x === 'number' && isNaN(x))) errs[k] = 'Required.';
+      });
       if (val.title && val.title.length < 10) errs.title = 'Use at least 10 characters.';
+      if (/\[.+\]/.test(val.title)) errs.title = 'Replace the [placeholders] from the template.';
       if (!errs.weight && (val.weight < 0 || val.weight > 100)) errs.weight = 'Enter a weight from 0 to 100.';
       if (val.startDate && val.dueDate && val.dueDate < val.startDate) errs.dueDate = 'The due date must be on or after the start date.';
       if (!val.dueDate && !errs.dueDate) val.dueDate = cycle.endDate;
-      if (val.measurementType !== 'RolledUp' && val.target !== '' && val.baseline !== '' && val.target === val.baseline && val.measurementType !== 'Milestone') errs.target = 'The target must differ from the baseline.';
+      if (['Numeric', 'Percentage', 'Currency'].indexOf(val.measurementType) >= 0 && val.target !== '' && val.baseline !== '' && val.target === val.baseline) errs.target = 'The target must differ from the baseline.';
+      if (!editing && val.measurementType === 'Tasks' && !taskTitles().length) errs.taskText = 'Add at least one task.';
       return errs;
     }
-    var labels = { level: 'Level', parentId: 'Parent', title: 'Title', description: 'Description', ownerId: 'Owner', departmentId: 'Department', teamId: 'Team', visibility: 'Visibility', measurementType: 'Measured as', unit: 'Unit', baseline: 'Baseline', target: 'Target', weight: 'Weight', startDate: 'Start date', dueDate: 'Due date' };
+    var labels = { level: 'Goal type', parentId: 'Aligned to', title: 'Title', description: 'Description', ownerId: 'Owner', departmentId: 'Department', teamId: 'Team', visibility: 'Visibility', labels: 'Labels', measurementType: 'Progress measured as', unit: 'Unit', baseline: 'Baseline', target: 'Target', taskText: 'Tasks', weight: 'Weight', startDate: 'Start date', dueDate: 'Due date' };
     function showErrors(errs) {
       Object.keys(labels).forEach(function (k) {
-        var e = $(k + '-err'), c = $(k);
-        if (!e || !c) return;
-        if (errs[k]) { e.textContent = errs[k]; e.hidden = false; c.setAttribute('aria-invalid', 'true'); c.setAttribute('aria-describedby', k + '-err'); }
-        else { e.hidden = true; c.removeAttribute('aria-invalid'); c.setAttribute('aria-describedby', k + '-hint'); }
+        var e = $(k + '-err'), c = $(k) || document.querySelector('input[name="label"]');
+        if (!e) return;
+        if (errs[k]) { e.textContent = errs[k]; e.hidden = false; if ($(k)) { c.setAttribute('aria-invalid', 'true'); c.setAttribute('aria-describedby', k + '-err'); } }
+        else { e.hidden = true; if ($(k)) { c.removeAttribute('aria-invalid'); if ($(k + '-hint')) c.setAttribute('aria-describedby', k + '-hint'); } }
       });
-      var keys = Object.keys(errs);
-      var sum = $('err-summary');
+      var keys = Object.keys(errs), sum = $('err-summary');
       if (!keys.length) { sum.hidden = true; return; }
-      sum.innerHTML = '<strong>Please fix ' + keys.length + ' problem' + (keys.length > 1 ? 's' : '') + ':</strong><ul style="margin:4px 0 0">' + keys.map(function (k) { return '<li><a href="#' + k + '">' + esc(labels[k]) + ': ' + esc(errs[k]) + '</a></li>'; }).join('') + '</ul>';
+      sum.innerHTML = '<strong>Please fix ' + keys.length + ' problem' + (keys.length > 1 ? 's' : '') + ':</strong><ul style="margin:4px 0 0">' + keys.map(function (k) { return '<li><a href="#' + (k === 'labels' ? 'f-labels' : k) + '">' + esc(labels[k]) + ': ' + esc(errs[k]) + '</a></li>'; }).join('') + '</ul>';
       sum.hidden = false;
       sum.focus();
     }
@@ -239,14 +322,14 @@
       if (Object.keys(errs).length) return;
       if (editing) {
         delete val.level;
+        if (editing.measurementType === 'Tasks') { delete val.target; delete val.measurementType; }
         var res = O.updateOkr(editing.id, val);
-        var msg = res.changed.length ? 'Changes saved' : 'No changes to save';
-        U.flash(msg, 'success', res.requests.length ? res.requests.length + ' change(s) sent for approval: ' + res.requests.map(function (r) { return O.REQUEST_TYPES[r.requestType].toLowerCase(); }).join(', ') + '.' : undefined);
+        U.flash(res.changed.length ? 'Changes saved' : 'No changes to save', 'success', res.requests.length ? res.requests.length + ' change(s) sent for approval: ' + res.requests.map(function (r) { return O.REQUEST_TYPES[r.requestType].toLowerCase(); }).join(', ') + '.' : undefined);
         window.location.href = 'okr.html?id=' + encodeURIComponent(editing.id);
       } else {
-        var created = O.createOkr(val, mode === 'submit');
-        var cfg = O.levelConfig(created.level);
-        U.flash(created.code + ' created', 'success', cfg.approvalRequired ? (mode === 'submit' ? 'Sent to the ' + O.ROLE_LABELS[cfg.approverRole] + ' for approval.' : 'Saved as a draft.') : 'It is active now.');
+        var created = O.createOkr(val, mode === 'submit', taskTitles());
+        var c = O.levelConfig(created.level);
+        U.flash(created.code + ' created', 'success', c.approvalRequired ? (mode === 'submit' ? 'Sent for approval.' : 'Saved as a draft.') : 'It is active now.');
         window.location.href = 'okr.html?id=' + encodeURIComponent(created.id);
       }
     });
